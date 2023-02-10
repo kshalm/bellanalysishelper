@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(name='analysishelper',
       version='0.1',
@@ -7,13 +7,11 @@ setup(name='analysishelper',
       author='Krister Shalm, Gautam Kavuri',
       author_email='lks@nist.gov',
       license='MIT',
-      packages=['bellhelper', 'bellhelper.data'],
+      packages=find_packages(),
       install_requires=['pyyaml',
-                        'bellMotors @ git+https://github.com/kshalm/motorLib.git#egg=bellMotors',
-                        'zmqhelper @ git+https://github.com/kshalm/zmqhelpers.git#egg=zmqhelper',
+                        'zmqhelper @ git+https://github.com/kshalm/zmqhelpers.git',
                         'numpy',
                         'scipy',
-                        'redis',
                         'numba'],
       include_package_data=True,
       zip_safe=False)
