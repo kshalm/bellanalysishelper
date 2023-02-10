@@ -6,8 +6,8 @@ import yaml
 import os
 import base64
 try:
-    import bellhelper.data.coinclib as cl
-    import bellhelper.data.timetaggers as tt
+    import analysishelper.data.coinclib as cl
+    import analysishelper.data.timetaggers as tt
 except Exception:
     import coinclib as cl
     import timetaggers as tt

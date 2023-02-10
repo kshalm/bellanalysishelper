@@ -13,10 +13,10 @@ import copy
 # import zlib
 
 try:
-    import bellhelper.data.coinclib as cl
-    import bellhelper.data.singletimetagger as tt
-    import bellhelper.data.analysis_library as al
-    import bellhelper.data.processBellData as pdbell
+    import analysishelper.coinclib as cl
+    import analysishelper.singletimetagger as tt
+    import analysishelper.analysis_library as al
+    import analysishelper.processBellData as pdbell
 except Exception:
     import coinclib as cl
     import singletimetagger as tt

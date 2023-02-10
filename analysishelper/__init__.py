@@ -1,2 +1,2 @@
-from singletimetagger import TimeTagger
-from timetaggers import TimeTaggers
+from .timetaggers import TimeTaggers
+from .singletimetagger import TimeTagger
