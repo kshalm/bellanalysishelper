@@ -1,0 +1,59 @@
+DIVIDER: 320
+INT_TIME: 0.2
+SINGLE_SERVER: false
+alice:
+  channelmap:
+    bSync: 5
+    detector:
+      V: 0
+    pkIdx: 120
+    setting0: 4
+    setting1: 2
+    sync: 5
+  coin_radius: 28.0
+  ip: 132.163.53.24
+  port: 50000
+alignchannel:
+  alice: 0
+  bob: 0
+analysis:
+  abDelay: 74034
+  findPk: false
+  pockelOff: 500
+  pockelOffLength: 10
+  pockelOn: 12
+  pockelOnLength: 10
+  pulseABDelay: 26
+  syncTTagDiff: -4286
+  ttagOffset: 453693377478
+bob:
+  channelmap:
+    bSync: 6
+    detector:
+      V: 0
+    pkIdx: 29
+    setting0: 3
+    setting1: 2
+    sync: 6
+  coin_radius: 24.0
+  ip: 132.163.53.14
+  port: 50000
+detectors:
+  alice:
+    ip: bellamd2.campus.nist.gov
+    port: 56000
+  bob:
+    ip: qittlab-nuc-06.campus.nist.gov
+    port: 56000
+fridge:
+  alice:
+    ip: alicefridgepi.campus.nist.gov
+    port: 50326
+  bob:
+    ip: bobfridgepi.campus.nist.gov
+    port: 50326
+measureViol: false
+pockelProp:
+  enable: true
+  length: 11
+  start: 20
