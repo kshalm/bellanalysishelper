@@ -1,4 +1,4 @@
-import timetaggers as tt 
+#import timetaggers as tt 
 import numpy as np
 import copy
 # import zlib
@@ -6,8 +6,8 @@ import yaml
 import os
 import base64
 try:
-    import analysishelper.data.coinclib as cl
-    import analysishelper.data.timetaggers as tt
+    import analysishelper.coinclib as cl
+    import analysishelper.timetaggers as tt
 except Exception:
     import coinclib as cl
     import timetaggers as tt

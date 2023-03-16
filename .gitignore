@@ -1,3 +1,6 @@
 .DS_Store
 .pyc
 .yaml
+analysishelper.egg-info/
+analysishelper/__pycache__/
+build/
