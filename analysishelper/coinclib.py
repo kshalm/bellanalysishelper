@@ -548,9 +548,9 @@ def compress_binary_data(data, aggregate=False):
     data = np.zeros(len(sA), dtype=dataType)
 
     data['sA'] = sA
-    data['sB'] = sB
-    data['eA'] = eA
-    data['eB'] = eB
+    data['sB'] = sB[:len(sA)]
+    data['eA'] = eA[:len(sA)]
+    data['eB'] = eB[:len(sA)]
 
     # data.tofile(fname)
     binData = data.tobytes()
