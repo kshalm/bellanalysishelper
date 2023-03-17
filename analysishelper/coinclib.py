@@ -545,12 +545,13 @@ def compress_binary_data(data, aggregate=False):
         dataType = [('sA', 'u1'), ('sB', 'u1'), ('eA', 'u8'), ('eB', 'u8')]
 
     # Create a structured array. Each row represents the results from one trial.
-    data = np.zeros(len(sA), dtype=dataType)
-
-    data['sA'] = sA
-    data['sB'] = sB[:len(sA)]
-    data['eA'] = eA[:len(sA)]
-    data['eB'] = eB[:len(sA)]
+    len_set = min(len(sA), len(sB))
+    data = np.zeros(len_set, dtype=dataType)
+    
+    data['sA'] = sA[:len_set]
+    data['sB'] = sB[:len_set]
+    data['eA'] = eA[:len_set]
+    data['eB'] = eB[:len_set]
 
     # data.tofile(fname)
     binData = data.tobytes()
