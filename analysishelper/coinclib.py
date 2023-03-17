@@ -188,6 +188,8 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
     if partyToTrim is not None:
         syncTTAGS = trimmedData[partyToTrim]['ttag'][syncBool[partyToTrim]]
         lastSyncTTAG = syncTTAGS[-1]
+        if np.isscalar(lastSyncTTAG):
+            lastSyncTTAG = np.array([lastSyncTTAG])
         mask = trimmedData[partyToTrim]['ttag'] < lastSyncTTAG[-1]
         trimmedData[partyToTrim] = trimmedData[partyToTrim][mask]
 
@@ -534,7 +536,7 @@ def compress_binary_data(data, aggregate=False):
     eA = data['alice']['Outcome'].astype('u8')  # Alice outcome
     eB = data['bob']['Outcome'].astype('u8')  # Bob outcome
     if aggregate:
-        print('Requesto to aggregate')
+        print('Request to aggregate')
         dataType = [('sA', 'u1'), ('sB', 'u1'), ('eA', 'u1'), ('eB', 'u1')]
         eA = (eA > 0).astype('u1')
         eB = (eB > 0).astype('u1')
