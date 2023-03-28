@@ -235,10 +235,15 @@ class TimeTaggers():
 
         paramsS = copy.deepcopy(paramsCh)
         # only choose one of the detectors from Alice and Bob to start
-        aliceDetCh = self.config['alignchannel']['alice']
-        bobDetCh = self.config['alignchannel']['bob']
-        paramsS['alice']['channels']['detector'] = aliceDetCh
-        paramsS['bob']['channels']['detector'] = bobDetCh
+        # aliceDetCh = self.config['alignchannel']['alice']
+        # bobDetCh = self.config['alignchannel']['bob']
+        # paramsS['alice']['channels']['detector'] = aliceDetCh
+        # paramsS['bob']['channels']['detector'] = bobDetCh
+        detectorName = 'V'
+        paramsS['alice']['channels']['detector'] = paramsCh['alice']['channels']['detector'][detectorName]
+        paramsS['bob']['channels']['detector'] = paramsCh['bob']['channels']['detector'][detectorName]
+        # print(paramsCh)
+        # print(paramsCh['alice']['channels']['detector'])
         divider = paramsCh['divider']*1.
 
         # print('starting')

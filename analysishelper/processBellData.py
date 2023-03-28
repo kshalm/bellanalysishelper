@@ -255,38 +255,6 @@ def main():
         fNameOut = fNameOut.split('/')[-1]
         fOut = path+'processed/test2/'+date+'/'+fNameOut
         files['output'].append(fOut)
-        # print(fOut)
-
-    # fileA = ['2022_10_05_23_39_alice_suboptimal_test_run_two_2_60s.dat']
-    # # fileA = ['2022_03_11_19_37_alice__1min_chunk_violation.dat',
-    # #         '2022_03_11_19_38_alice__1min_chunk_violation_2.dat']
-
-    # fileB = ['2022_10_05_23_39_bob_suboptimal_test_run_two_2_60s.dat']
-    # fileB = ['2022_03_11_19_37_bob__1min_chunk_violation.dat',
-    #         '2022_03_11_19_38_bob__1min_chunk_violation_2.dat']
-
-    # fileA = ['2022_03_11_23_12_alice__80_percent_check_60s_.dat']
-    # fileB = ['2022_03_11_23_12_bob__80_percent_check_60s_.dat']
-    # fAlice = path+'/Alice/'+date+'/'+fileA
-    # fBob = path+'/Bob/'+date+'/'+fileB
-
-    # files ={}
-    # files['alice'] = []
-    # files['bob'] = []
-    # files['output'] = []
-    # for i in range(len(fileA)):
-    #     fAlice = path+'/Alice/'+date+'/'+fileA[i]
-    #     fBob = path+'/Bob/'+date+'/'+fileB[i]
-    #     fNameOut = fileB[i].replace('_bob','').replace('.dat','')#.split['.'][0]
-    #     fNameOut += '.bin.zip'
-    #     fOut = path+'/processed/'+date+'/'+fNameOut
-    #     print(fNameOut)
-    #     files['alice'].append(fAlice)
-    #     files['bob'].append(fBob)
-    #     files['output'].append(fOut)
-
-    # configFile = 'client.yaml'
-    # config = load_config_data(configFile)
 
     filesSingle = {}
     indx = 11
@@ -298,15 +266,7 @@ def main():
             pass
     chStatsAll, compressedData = process_single_run(
         filesSingle, aggregate=True)
-    # chStatsAll = process_multiple_data_runs(files)
 
-    # chStatsAll = np.array([[66074860,2384557,2309746,105999],
-    #      [68059180,2381787,996158,761777],
-    #      [68093218,1016778,2308621,750236],
-    #      [69327491,1016925,997898,659596]])
-    # chStatsAll[[1,2]] = chStatsAll[[2,1]]
-    # chStatsAll[[0,3]] = chStatsAll[[3,0]]
-    print(chStatsAll)
     print('')
     CH, CHn, ratio, pValue = cl.calc_violation(chStatsAll)
 
