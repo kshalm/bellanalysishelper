@@ -310,7 +310,7 @@ def check_for_timetagger_roll_over(rawData, params):
     return rollover 
 
 def check_for_timetagger_jump(rawData, params):
-    jump = {'skip': False, 'jumpInfo': {}, 'err': False}
+    jump = {'skip': False, 'jumpInfo': {}, 'err': False, 'party':[]}
     error = None
     for key in rawData:
         syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
@@ -330,7 +330,6 @@ def check_for_timetagger_jump(rawData, params):
             jump['jumpInfo'][key]['position'] = pos
             jump['jumpInfo'][key]['ttag'] = ttags
 
-    # print('jumps', jump)
     if jump['skip']:
         error = {'jointSkip':False, 'err': False, 'info':{}}
         error['info'] = jump['jumpInfo']
@@ -338,7 +337,7 @@ def check_for_timetagger_jump(rawData, params):
         all_jump_pos = []
         ji = jump['jumpInfo']
         # Compute the overlap between jump events
-        if len(jump['party']>1): # errors on both parties
+        if len(jump['party'])>1: # errors on both parties
             overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
             
             if len(overlap)>0:

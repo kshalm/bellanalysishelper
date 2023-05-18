@@ -6,6 +6,7 @@ import os
 import base64
 try:
     import analysishelper.coinclib as cl
+    # import coinclib as cl
     import analysishelper.timetaggers as tt
 except Exception:
     import coinclib as cl
