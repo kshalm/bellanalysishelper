@@ -1,4 +1,4 @@
-#import timetaggers as tt 
+import timetaggers as tt 
 import numpy as np
 import copy
 # import zlib
@@ -6,14 +6,15 @@ import yaml
 import os
 import base64
 try:
-    import analysishelper.coinclib as cl
-    import analysishelper.timetaggers as tt
+    import bellhelper.data.coinclib as cl
+    import bellhelper.data.timetaggers as tt
 except Exception:
     import coinclib as cl
     import timetaggers as tt
 
 
 def process_single_run(files, aggregate=True, findSync=False):
+    errors = {}
     ttagDataStructure = np.dtype(
         [('ch', 'u1'), ('ttag', 'u8'), ('xfer', 'u2')])
     parties = {'alice', 'bob'}
@@ -29,9 +30,17 @@ def process_single_run(files, aggregate=True, findSync=False):
     if findSync:
         rawData, timeTaggers = find_ttag_offset(timeTaggers, rawData)
 
-    # @TODO check for timetagger jumps
-
-    reducedData = analyze_data(rawData, timeTaggers.config)
+    rollover = cl.check_for_timetagger_roll_over(rawData, timeTaggers.config)
+    if rollover['err']:
+        errors['rollover'] = True
+        print('ERROR: Timetagger rollover detected')
+    # print('rollover', rollover)
+    # print('')
+    
+    reducedData, err = analyze_data(rawData, timeTaggers.config)
+    if err is not None:
+        for k,v in err.items():
+            errors[k] = v
 
     if 'output' in files:
         compressedData = cl.write_to_compressed_file(
@@ -42,7 +51,7 @@ def process_single_run(files, aggregate=True, findSync=False):
 
     counts = process_counts(reducedData)
     counts = counts.astype('int')
-    return counts, compressedData
+    return counts, compressedData, errors
 
 
 def find_ttag_offset(timeTaggers, rawData):
@@ -58,9 +67,9 @@ def find_ttag_offset(timeTaggers, rawData):
     for p in pkIdx:
         config[p]['channelmap']['pkIdx'] = pkIdx[p]
 
-    print('')
-    print(config['analysis'])
-    print('')
+    # print('')
+    # print(config['analysis'])
+    # print('')
     # timeTaggers.configFile = fConfig
     timeTaggers.config = config
     # timeTaggers.save_config_data()
@@ -81,6 +90,7 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
     configArray = []
 
     chStatsAll = np.zeros((4, 4))
+    errors=[]
 
     for i in range(1, nFiles):
         print('starting: ', fAlice[i])
@@ -93,15 +103,16 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
         # filesForSingleRun['bob'] = fBob[i]
         # filesForSingleRun['config'] = fConfig[i]
         # filesForSingleRun
-        counts, compressedData = process_single_run(
+        counts, compressedData, err = process_single_run(
             filesForSingleRun, aggregate=aggregate)
+        errors.append(err)
 
         chStatsAll += counts.astype('int')
         print(chStatsAll.astype(int))
         print('')
 
     chStatsAll = chStatsAll.astype('int')
-    return chStatsAll
+    return chStatsAll, errors
 
 
 def check_for_detector_going_normal(ttags):
@@ -109,6 +120,7 @@ def check_for_detector_going_normal(ttags):
 
 
 def analyze_data(rawData, config):
+    errors = None
     ttagOffset = config['analysis']['ttagOffset']
     abDelay = config['analysis']['pulseABDelay']
     syncTTagDiff = config['analysis']['syncTTagDiff']
@@ -121,6 +133,20 @@ def analyze_data(rawData, config):
 
     trimmedData, err = cl.trim_data(
         rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
+    # trimmedData, err = cl.trim_processed_data(rawData, ttagOffset, syncTTagDiff)
+    #check for timetagger jumps
+    err, rawData = cl.check_for_timetagger_jump(trimmedData, config)
+    # print('jumps', err)
+    if err is not None:
+        errors = {}
+        errors['ttagJump']={}
+        for k,v in err.items():
+            errors['ttagJump'][k] = v
+            if (k=='err') and (v==True):
+                print('ERROR: Timetagger jump detected.')
+    # if jump['err']:
+        # print('ERROR: Timetagger jump detected')
+        # errors['jump'] = True
 
     paramsSingle = copy.deepcopy(paramsCh)
     params = {'alice': {}, 'bob': {}}
@@ -148,7 +174,7 @@ def analyze_data(rawData, config):
         reduced = cl.get_processed_data(trimmedData[party], props[party],
                                         offset[party], pcStart, pcLength)
         reducedData[party] = reduced
-    return reducedData
+    return reducedData, errors
 
 
 def process_counts(data):
@@ -255,18 +281,58 @@ def main():
         fNameOut = fNameOut.split('/')[-1]
         fOut = path+'processed/test2/'+date+'/'+fNameOut
         files['output'].append(fOut)
+        # print(fOut)
+
+    # fileA = ['2022_10_05_23_39_alice_suboptimal_test_run_two_2_60s.dat']
+    # # fileA = ['2022_03_11_19_37_alice__1min_chunk_violation.dat',
+    # #         '2022_03_11_19_38_alice__1min_chunk_violation_2.dat']
+
+    # fileB = ['2022_10_05_23_39_bob_suboptimal_test_run_two_2_60s.dat']
+    # fileB = ['2022_03_11_19_37_bob__1min_chunk_violation.dat',
+    #         '2022_03_11_19_38_bob__1min_chunk_violation_2.dat']
+
+    # fileA = ['2022_03_11_23_12_alice__80_percent_check_60s_.dat']
+    # fileB = ['2022_03_11_23_12_bob__80_percent_check_60s_.dat']
+    # fAlice = path+'/Alice/'+date+'/'+fileA
+    # fBob = path+'/Bob/'+date+'/'+fileB
+
+    # files ={}
+    # files['alice'] = []
+    # files['bob'] = []
+    # files['output'] = []
+    # for i in range(len(fileA)):
+    #     fAlice = path+'/Alice/'+date+'/'+fileA[i]
+    #     fBob = path+'/Bob/'+date+'/'+fileB[i]
+    #     fNameOut = fileB[i].replace('_bob','').replace('.dat','')#.split['.'][0]
+    #     fNameOut += '.bin.zip'
+    #     fOut = path+'/processed/'+date+'/'+fNameOut
+    #     print(fNameOut)
+    #     files['alice'].append(fAlice)
+    #     files['bob'].append(fBob)
+    #     files['output'].append(fOut)
+
+    # configFile = 'client.yaml'
+    # config = load_config_data(configFile)
 
     filesSingle = {}
     indx = 11
     for key, fArray in files.items():
         try:
             filesSingle[key] = fArray[indx]
-            print(fArray[indx])
+            # print(fArray[indx])
         except Exception:
             pass
-    chStatsAll, compressedData = process_single_run(
+    chStatsAll, compressedData, errors = process_single_run(
         filesSingle, aggregate=True)
+    # chStatsAll = process_multiple_data_runs(files)
 
+    # chStatsAll = np.array([[66074860,2384557,2309746,105999],
+    #      [68059180,2381787,996158,761777],
+    #      [68093218,1016778,2308621,750236],
+    #      [69327491,1016925,997898,659596]])
+    # chStatsAll[[1,2]] = chStatsAll[[2,1]]
+    # chStatsAll[[0,3]] = chStatsAll[[3,0]]
+    print(chStatsAll)
     print('')
     CH, CHn, ratio, pValue = cl.calc_violation(chStatsAll)
 

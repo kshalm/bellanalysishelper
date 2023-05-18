@@ -1,14 +1,11 @@
 import numpy as np
 import zlib
 from numba import jit
-#import json
-#import time
 import json
 import time
 
 import scipy.signal
 from scipy.stats import binom
-#from scipy.stats import mode
 from copy import deepcopy
 
 TTAGERRESOLUTION = 78.125E-12
@@ -112,9 +109,6 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
         if data[key] is None:
             validData = False
 
-            # trimmedData = data
-            # err = True
-
     if validData == False:
         for key in data:
             tdata = trim_data_single_party(data[key], dt=dt)
@@ -128,7 +122,7 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
 
     startTTag = max(aData[0], bData[0])
     # print('startTTag', startTTag)
-    abDelay = -1
+    # abDelay = -1
     # print('abDelay', abDelay, 'START', startTTag, aData[0], bData[0],ttagOffset, '\n')
 
     if syncTTagDiff > 0:  # Bob's sync occurs before Alices
@@ -166,18 +160,20 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
     trimmedData['alice'] = data['alice'][aClicks]
     trimmedData['bob'] = data['bob'][bClicks]
     trimmedData['alice']['ttag'] = trimmedData['alice']['ttag']-(startTTag)
-    trimmedData['bob']['ttag'] = trimmedData['bob']['ttag'] - \
-        (startTTag)+ttagOffset
+    trimmedData['bob']['ttag'] = trimmedData['bob']['ttag']-(startTTag)+ttagOffset
 
     # Make sure each dataset has the same number of sync pulses / trials
     nSyncs = {}
     syncBool = {}
     for party in ['alice', 'bob']:
         ch = params[party]['channels']
-        syncArray, sBool = get_sync_array(trimmedData[party], ch['sync'])
-        nSyncs[party] = sBool.sum()
+        # syncArray, sBool = get_sync_array(trimmedData[party], ch['sync'])
+        sBool, nSyncsParty = calc_n_syncs(trimmedData, party, params)
+        # nSyncs[party] = sBool.sum()
+        nSyncs[party] = nSyncsParty
         syncBool[party] = sBool
 
+    # print('nSyncs before trim', nSyncs)
     if (nSyncs['alice'] == nSyncs['bob']):
         partyToTrim = None
     elif (nSyncs['alice'] > nSyncs['bob']):
@@ -185,15 +181,30 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
     else:
         partyToTrim = 'bob'
 
+    # print('party to trim', partyToTrim)
+
     if partyToTrim is not None:
+        sync_diff = int(abs(nSyncs['alice'] - nSyncs['bob']))
         syncTTAGS = trimmedData[partyToTrim]['ttag'][syncBool[partyToTrim]]
-        lastSyncTTAG = syncTTAGS[-1]
-        if np.isscalar(lastSyncTTAG):
-            lastSyncTTAG = np.array([lastSyncTTAG])
-        mask = trimmedData[partyToTrim]['ttag'] < lastSyncTTAG[-1]
+        lastSyncTTAG = syncTTAGS[-1*sync_diff]
+        mask = trimmedData[partyToTrim]['ttag'] < lastSyncTTAG
+
         trimmedData[partyToTrim] = trimmedData[partyToTrim][mask]
+        sBoolParty, nSyncsParty = calc_n_syncs(trimmedData, partyToTrim, params)
+        # print(sBool, nSyncsParty)
+        nSyncs[partyToTrim] = nSyncsParty
+        syncBool[partyToTrim] = sBoolParty
+                # print(party, nSyncsParty)
+    # print('finished trimming')
 
     return trimmedData, err
+
+def calc_n_syncs(data, party, params):
+    ch = params[party]['channels']
+    syncArrayRef, sBoolRef = get_sync_array(data[party], ch['sync'])
+    nSyncsRef = sBoolRef.sum()
+    # print('inside', party, sBoolRef, nSyncsRef)
+    return sBoolRef, nSyncsRef
 
 
 def trim_data_single_party(data, dt=None):
@@ -285,23 +296,152 @@ def calc_period(det, divider=800, syncCh=6, maxPeriod=170):
 
 # @jit
 
+def check_for_timetagger_roll_over(rawData, params):
+    rollover = {'err': False, 'party': [], 'position': []}
+
+    for key in rawData:
+        ttags = rawData[key]['ttag']
+        diffTTags = np.diff(ttags)
+        neg_indx = np.where(diffTTags<0)[0]
+        if len(neg_indx)>0:
+            rollover['err'] = True 
+            rollover['party'].append(key)
+            rollover['position'].append(neg_indx)
+    return rollover 
 
 def check_for_timetagger_jump(rawData, params):
-    jump = {'skip': False, 'party': [], 'position': []}
-
+    jump = {'skip': False, 'jumpInfo': {}, 'err': False}
+    error = None
     for key in rawData:
         syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
         sync = rawData[key]['ttag'][syncBool]
 
         diffTTags = np.abs(np.diff(sync))
         avgDiff = np.mean(diffTTags)
-        scale = 2
-        pos = np.where(diffTTags > avgDiff * scale)
-        if (pos[0] > 0):
+        scale = 1.01
+        pos = np.where(diffTTags > avgDiff * scale)[0]
+        ttags = sync[pos]
+
+        if len(pos)>0:
             jump['skip'] = True
-            jump['party'].append(key)
-            jump['position'].append(pos[0])
-    return(jump)
+            # jump['party'].append(key)
+            # jump['position'].append(pos[0])
+            jump['jumpInfo'][key] = {}
+            jump['jumpInfo'][key]['position'] = pos
+            jump['jumpInfo'][key]['ttag'] = ttags
+
+    # print('jumps', jump)
+    if jump['skip']:
+        error = {'jointSkip':False, 'err': False, 'info':{}}
+        error['info'] = jump['jumpInfo']
+        # print('looking for errors')
+        n_jumps = []
+        all_jump_pos = []
+        ji = jump['jumpInfo']
+        # Compute the overlap between jump events
+        overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
+        '''
+        Detect whether both timetaggers jump together. This tends not to introduce
+        errors.
+        '''
+        if len(overlap)>0:
+            error['jointSkip']=True
+        '''
+        Detect if only one timetagger jumped. This is an error.
+        '''
+        for party in jump['jumpInfo']:
+            if party=='alice':
+                indx = a_ind
+            else:
+                indx = b_ind
+            mask = np.ones(len(ji[party]['position']), dtype=bool)
+            mask[indx] = False 
+            unique_jumps = ji[party]['position'][mask]
+            if len(unique_jumps)>0:
+                error['err']=True
+
+
+
+        # print(overlap, x_ind, y_ind)
+        # print('')
+
+        # for party in jump['jumpInfo']:
+        #     n_jumps.append(len(jump['jumpInfo'][party]['position']))
+        #     all_jump_pos+=jump['jumpInfo'][party]['position'].tolist()   
+        # # print('n_jumps', n_jumps)
+
+        # print('all jumps', all_jump_pos)
+        # unique_jumps = np.unique(np.array(all_jump_pos),return_inverse=False)
+        # duplicate_jumps, unique_jumps_indx = np.unique(np.array(all_jump_pos),return_inverse=True)
+        # # duplicate_jumps_indx = unique_jumps_indx>0
+        # # print('indicies:', duplicate_jumps_indx, unique_jumps_indx)
+        # # duplicate_jumps = np.array(all_jump_pos)[duplicate_jumps_indx]
+        # print('duplicate jumps', duplicate_jumps, 'unique_jumps', unique_jumps)
+        # if len(unique_jumps)>0:
+        #     # print('In jumps, ERROR')
+        #     error['err']=True
+        # if len(duplicate_jumps)>0:
+        #     # both syncs skip together
+        #     error['jointSkip']=True
+
+
+        # if len(n_jumps)>1:
+        #     n_jumps_diff = np.abs(np.diff(np.array(n_jumps)))
+        #     # print('n_jumps_diff', n_jumps_diff)
+        #     diff_sum = n_jumps_diff.sum()
+        #     # print('diff_sum', diff_sum)
+        #     if diff_sum>0:
+        #         print('In jumps, ERROR')
+        #         jump['err']=True
+
+        # if len(pos)>0:
+        #     print(pos)
+        #     mask = np.array([True]*len(rawData[key]))
+        #     # print('mask', mask)
+        #     mask[pos]=False 
+        #     syncBool[pos] = False
+        #     goodSync = rawData[key]['ttag'][syncBool]
+        #     diffTTagsGood = np.abs(np.diff(goodSync))
+        #     avgDiffGood = np.mean(diffTTagsGood)
+        #     # jump[key] = pos 
+
+        #     # ttagDiff = sync - sync[0] - avgDiffGood
+        #     diffTTagsGood = np.diff(sync) - avgDiffGood
+        #     print('diffTTagsGood',diffTTagsGood)
+
+        #     # for p in pos:
+        #     #     syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
+        #     #     ttagJump = rawData[key]['ttag'][p]
+        #     #     maskJump = rawData[key]['ttag'][syncBool]>= ttagJump
+        #     #     jumpOffset = diffTTagsGood[p]
+        #     #     print('jumpOffset', jumpOffset)
+        #     #     syncs = rawData[key]['ttag'][syncBool]
+        #     #     syncs[maskJump]=syncs[maskJump]-jumpOffset
+        #     data = rawData[key]['ttag']
+        #     for i,p in enumerate(pos):
+        #         # ttagJump = rawData[key]['ttag'][p]
+        #         # print(key, i, p)
+
+        #         ttagJump = ttags[i]
+        #         try:
+        #             ttagEndJump = ttags[i+1]
+        #         except:
+        #             ttagEndJump = data[-1]
+        #         maskJump = (rawData[key]['ttag']>= ttagJump) & (rawData[key]['ttag']<ttagEndJump)
+        #         jumpOffset = diffTTagsGood[p]
+        #         # print('jumpOffset', jumpOffset, maskJump, ttagJump)
+                
+        #         # rawData[key]= rawData[key][maskJump]
+
+        #         # data=data[maskJump]
+        #         data[maskJump]=data[maskJump]-jumpOffset 
+        #         # syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
+        #         # syncs = rawData[key]['ttag'][syncBool]
+        #         # sync[p] = sync[p]-jumpOffset 
+
+    
+    
+    return error, rawData
 
 
 def calc_phase_info(det, divider, ch):
@@ -521,7 +661,9 @@ def trim_processed_data(data, ttagOffset, syncTTagDiff):
         for option in data[key].keys():
             data[key][option] = data[key][option][validRangeMask]
         del data[key]['SyncTTag']
-    return data
+
+    err = False
+    return err, data
 
 
 def compress_binary_data(data, aggregate=False):
@@ -536,7 +678,7 @@ def compress_binary_data(data, aggregate=False):
     eA = data['alice']['Outcome'].astype('u8')  # Alice outcome
     eB = data['bob']['Outcome'].astype('u8')  # Bob outcome
     if aggregate:
-        print('Request to aggregate')
+        print('Aggregating data')
         dataType = [('sA', 'u1'), ('sB', 'u1'), ('eA', 'u1'), ('eB', 'u1')]
         eA = (eA > 0).astype('u1')
         eB = (eB > 0).astype('u1')
@@ -545,13 +687,12 @@ def compress_binary_data(data, aggregate=False):
         dataType = [('sA', 'u1'), ('sB', 'u1'), ('eA', 'u8'), ('eB', 'u8')]
 
     # Create a structured array. Each row represents the results from one trial.
-    len_set = min(len(sA), len(sB))
-    data = np.zeros(len_set, dtype=dataType)
-    
-    data['sA'] = sA[:len_set]
-    data['sB'] = sB[:len_set]
-    data['eA'] = eA[:len_set]
-    data['eB'] = eB[:len_set]
+    data = np.zeros(len(sA), dtype=dataType)
+
+    data['sA'] = sA
+    data['sB'] = sB
+    data['eA'] = eA
+    data['eB'] = eB
 
     # data.tofile(fname)
     binData = data.tobytes()
