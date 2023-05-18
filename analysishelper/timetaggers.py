@@ -1,16 +1,9 @@
-# import select
 import numpy as np
-# import socket
 import time
-# import re
-# import traceback
-# import os
 import yaml
 from multiprocessing import Queue  # , Process
 import threading
 import copy
-# import bellhelper.data.processBellData as pdbell
-# import zlib
 
 try:
     import analysishelper.coinclib as cl
