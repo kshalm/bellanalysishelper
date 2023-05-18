@@ -324,7 +324,7 @@ def check_for_timetagger_jump(rawData, params):
 
         if len(pos)>0:
             jump['skip'] = True
-            # jump['party'].append(key)
+            jump['party'].append(key)
             # jump['position'].append(pos[0])
             jump['jumpInfo'][key] = {}
             jump['jumpInfo'][key]['position'] = pos
@@ -335,30 +335,36 @@ def check_for_timetagger_jump(rawData, params):
         error = {'jointSkip':False, 'err': False, 'info':{}}
         error['info'] = jump['jumpInfo']
         # print('looking for errors')
-        n_jumps = []
         all_jump_pos = []
         ji = jump['jumpInfo']
         # Compute the overlap between jump events
-        overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
+        if len(jump['party']>1): # errors on both parties
+            overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
+            
+            if len(overlap)>0:
+                error['jointSkip']=True
+            '''
+            Detect if only one timetagger jumped. This is an error.
+            '''
+            for party in jump['jumpInfo']:
+                if party=='alice':
+                    indx = a_ind
+                else:
+                    indx = b_ind
+                mask = np.ones(len(ji[party]['position']), dtype=bool)
+                mask[indx] = False 
+                unique_jumps = ji[party]['position'][mask]
+                if len(unique_jumps)>0:
+                    error['err']=True
+
+        else: #errors on one party
+            error['jointSkip'] = False
+            error['err'] = True
         '''
         Detect whether both timetaggers jump together. This tends not to introduce
         errors.
         '''
-        if len(overlap)>0:
-            error['jointSkip']=True
-        '''
-        Detect if only one timetagger jumped. This is an error.
-        '''
-        for party in jump['jumpInfo']:
-            if party=='alice':
-                indx = a_ind
-            else:
-                indx = b_ind
-            mask = np.ones(len(ji[party]['position']), dtype=bool)
-            mask[indx] = False 
-            unique_jumps = ji[party]['position'][mask]
-            if len(unique_jumps)>0:
-                error['err']=True
+        
 
 
 
