@@ -4,13 +4,15 @@ import copy
 import yaml
 import os
 import base64
-try:
-    import analysishelper.coinclib as cl
-    # import coinclib as cl
-    import analysishelper.timetaggers as tt
-except Exception:
-    import coinclib as cl
-    import timetaggers as tt
+import coinclib as cl
+import timetaggers as tt
+# try:
+#     import analysishelper.coinclib as cl
+#     # import coinclib as cl
+#     import analysishelper.timetaggers as tt
+# except Exception:
+#     import coinclib as cl
+#     import timetaggers as tt
 
 
 def process_single_run(files, aggregate=True, findSync=False):
@@ -30,6 +32,7 @@ def process_single_run(files, aggregate=True, findSync=False):
     if findSync:
         rawData, timeTaggers = find_ttag_offset(timeTaggers, rawData)
 
+    print('starting rollover detection')
     rollover = cl.check_for_timetagger_roll_over(rawData, timeTaggers.config)
     if rollover['err']:
         errors['rollover'] = True
@@ -118,35 +121,107 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
 def check_for_detector_going_normal(ttags):
     pass
 
-
-def analyze_data(rawData, config):
+def trim_and_check_for_jumps(rawData, config):
     errors = None
     ttagOffset = config['analysis']['ttagOffset']
     abDelay = config['analysis']['pulseABDelay']
     syncTTagDiff = config['analysis']['syncTTagDiff']
-    usePockelsMask = config['pockelProp']['enable']
+    paramsCh = get_ch_settings(config)
 
+    print('ttagOffset:', ttagOffset, 'abDelay:', abDelay, 'syncTTagDiff', syncTTagDiff)
+
+    err, rawData = cl.check_for_timetagger_jump(rawData, config, syncTTagDiff)
+    # Trim data
+    trimmedData, err = cl.trim_data(
+        rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
+
+    # err, trimmedData = cl.check_for_timetagger_jump(trimmedData, config, syncTTagDiff)
+    # trimmedData, err = cl.trim_data(
+    #             trimmedData, 0, abDelay, syncTTagDiff, paramsCh)
+
+    # err, trimmedData = cl.check_for_timetagger_jump(trimmedData, config)
+
+    # # check for jumps
+    # err, raw_data_list = cl.check_for_timetagger_jump(trimmedData, config)
+    # if err is not None:
+    #     errors = {}
+    #     errors['ttagJump']={}
+    #     for k,v in err.items():
+    #         errors['ttagJump'][k] = v
+    #         if (k=='err') and (v==True):
+    #             print('ERROR: Timetagger jump detected.')
+
+    # # If a jump error is detected, correct the data.
+    # if (err is not None) & (err['err']):
+    #     trimmed_data_list = []
+    #     for data in raw_data_list:
+    #         # Trim each data segment
+    #         td, err_trim = cl.trim_data(
+    #             data, 0, abDelay, syncTTagDiff, paramsCh)
+    #         trimmed_data_list.append(td)
+
+    #     # concatenate back together each data segment.
+    #     trimmedData = None
+    #     for td in trimmed_data_list:
+    #         if trimmedData is None:
+    #             trimmedData = td
+    #         else:
+    #             for party in rawData:
+    #                 trimmedData[party] = np.hstack((trimmedData[party], td[party]))
+
+    return errors, trimmedData
+
+
+def analyze_data(rawData, config):
+    # errors = None
+    # ttagOffset = config['analysis']['ttagOffset']
+    # abDelay = config['analysis']['pulseABDelay']
+    # syncTTagDiff = config['analysis']['syncTTagDiff']
+    # usePockelsMask = config['pockelProp']['enable']
+
+    # paramsCh = get_ch_settings(config)
+    # divider = paramsCh['divider']*1.
+    # findPk = paramsCh['findPk']
+    # isTrim = True
+
+    # trimmedData, err = cl.trim_data(
+    #     rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
+
+    # #check for timetagger jumps
+    # err, raw_data_list = cl.check_for_timetagger_jump(trimmedData, config)
+    # if err is not None:
+    #     errors = {}
+    #     errors['ttagJump']={}
+    #     for k,v in err.items():
+    #         errors['ttagJump'][k] = v
+    #         if (k=='err') and (v==True):
+    #             print('ERROR: Timetagger jump detected.')
+
+    # # If a jump error is detected, correct the data.
+    # if (err is not None) & (err['err']):
+    #     trimmed_data_list = []
+    #     for data in raw_data_list:
+    #         # Trim each data segment
+    #         td, err_trim = cl.trim_data(
+    #             data, 0, abDelay, syncTTagDiff, paramsCh)
+    #         trimmed_data_list.append(td)
+
+    #     # concatenate back together each data segment.
+    #     trimmedData = None
+    #     for td in trimmed_data_list:
+    #         if trimmedData is None:
+    #             trimmedData = td
+    #         else:
+    #             for party in rawData:
+    #                 trimmedData[party] = np.hstack((trimmedData[party], td[party]))
+    paramsCh = get_ch_settings(config)
     paramsCh = get_ch_settings(config)
     divider = paramsCh['divider']*1.
     findPk = paramsCh['findPk']
-    isTrim = True
+    usePockelsMask = config['pockelProp']['enable']
+    abDelay = config['analysis']['pulseABDelay']
 
-    trimmedData, err = cl.trim_data(
-        rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
-    # trimmedData, err = cl.trim_processed_data(rawData, ttagOffset, syncTTagDiff)
-    #check for timetagger jumps
-    err, rawData = cl.check_for_timetagger_jump(trimmedData, config)
-    # print('jumps', err)
-    if err is not None:
-        errors = {}
-        errors['ttagJump']={}
-        for k,v in err.items():
-            errors['ttagJump'][k] = v
-            if (k=='err') and (v==True):
-                print('ERROR: Timetagger jump detected.')
-    # if jump['err']:
-        # print('ERROR: Timetagger jump detected')
-        # errors['jump'] = True
+    errors, trimmedData = trim_and_check_for_jumps(rawData, config)
 
     paramsSingle = copy.deepcopy(paramsCh)
     params = {'alice': {}, 'bob': {}}

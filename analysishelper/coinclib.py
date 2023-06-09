@@ -118,7 +118,9 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
 
     aData = data['alice']['ttag']
     # event number for all bob tags, corrected for delay
-    bData = data['bob']['ttag'] + ttagOffset
+    # bData = data['bob']['ttag'] + ttagOffset
+    bData = 1.*data['bob']['ttag'] + 1.*ttagOffset # event number for all bob tags, corrected for delay
+    bData = bData.astype('int')
 
     startTTag = max(aData[0], bData[0])
     # print('startTTag', startTTag)
@@ -160,7 +162,9 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
     trimmedData['alice'] = data['alice'][aClicks]
     trimmedData['bob'] = data['bob'][bClicks]
     trimmedData['alice']['ttag'] = trimmedData['alice']['ttag']-(startTTag)
-    trimmedData['bob']['ttag'] = trimmedData['bob']['ttag']-(startTTag)+ttagOffset
+    # trimmedData['bob']['ttag'] = trimmedData['bob']['ttag']-(startTTag)+ttagOffset
+    trimmedData['bob']['ttag'] = 1.*trimmedData['bob']['ttag']-(startTTag)+ttagOffset
+    trimmedData['bob']['ttag'] = trimmedData['bob']['ttag'].astype('int')
 
     # Make sure each dataset has the same number of sync pulses / trials
     nSyncs = {}
@@ -300,152 +304,333 @@ def check_for_timetagger_roll_over(rawData, params):
     rollover = {'err': False, 'party': [], 'position': []}
 
     for key in rawData:
-        ttags = rawData[key]['ttag']
+        ttags = rawData[key]['ttag']*1.
         diffTTags = np.diff(ttags)
         neg_indx = np.where(diffTTags<0)[0]
+        print(key,ttags,  diffTTags, neg_indx, ttags[0], np.min(ttags) )
         if len(neg_indx)>0:
             rollover['err'] = True 
             rollover['party'].append(key)
             rollover['position'].append(neg_indx)
+            print('rollover detected', rollover)
+            print('')
     return rollover 
 
-def check_for_timetagger_jump(rawData, params):
+
+def split_data_at_jumps(rawData, err):
+    n_ttags_to_skip = 1
+    ttag_jump_list = []
+    raw_data_list = []
+    data_to_split = rawData
+
+    if rawData is None:
+        return None, None
+
+    if err['err']:
+        for party in err['info']:
+            # print(party, err['info'][party]['unique_ttags'])
+            ttag_list = err['info'][party]['unique_ttags']
+            # print(party, ttag_list)
+            if ttag_list is not None:
+                ttag_jump_list = [*ttag_jump_list, *ttag_list]
+                # ttag_jump_list+=ttag_list
+
+    ttag_jump_list.sort()
+
+    for jump_ttag in ttag_jump_list:
+        data_before, data_after = split_data(data_to_split, jump_ttag)
+        if data_before is not None:
+            raw_data_list.append(data_before)
+        if data_after is not None:
+            data_to_split = data_after
+
+    if data_after is not None:
+        raw_data_list.append(data_after)
+    return raw_data_list
+
+
+def split_data(rawData, jump_ttag, n_ttags_to_skip=100):
+    raw_data_before = {}
+    raw_data_after = {}
+
+    for party in rawData:
+        raw_data_before[party] = ""
+        raw_data_after[party] = ""
+        ttags = rawData[party]['ttag']
+        if ttags is not None:
+            mask_before = ttags<jump_ttag
+            # mask_after = ttags>jump_ttag
+            raw_data_before[party] = rawData[party][mask_before]
+            # raw_data_after[party] = rawData[party][mask_after]
+        try:
+            jump_pos = np.where(ttags > jump_ttag)[0]
+            # print('jump position', jump_pos)
+            new_start = jump_pos[n_ttags_to_skip]
+            mask_after = ttags>ttags[new_start]
+            raw_data_after[party] = rawData[party][mask_after]
+        except:
+            # Too close to the end.
+            raw_data_after[party] = None
+
+    return raw_data_before, raw_data_after
+
+# def check_for_timetagger_jump(rawData, params):
+#     # print('Starting jump check')
+#     jump = {'skip': False, 'jumpInfo': {}, 'err': False, 'party':[]}
+#     error = None
+#     for key in rawData:
+#         syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
+#         sync = rawData[key]['ttag'][syncBool]
+
+#         diffTTags = np.abs(np.diff(sync))
+#         avgDiff = np.mean(diffTTags)
+#         scale = 1.01
+#         pos = np.where(diffTTags > avgDiff * scale)[0]
+#         ttags = sync[pos]
+
+#         if len(pos)>0:
+#             jump['skip'] = True
+#             jump['party'].append(key)
+#             # jump['position'].append(pos[0])
+#             jump['jumpInfo'][key] = {}
+#             jump['jumpInfo'][key]['position'] = pos
+#             jump['jumpInfo'][key]['ttag'] = ttags
+
+#     if jump['skip']:
+#         error = {'jointSkip':False, 'err': False, 'info':{}}
+#         error['info'] = jump['jumpInfo']
+#         # print('looking for errors')
+#         all_jump_pos = []
+#         ji = jump['jumpInfo']
+#         # Compute the overlap between jump events
+#         if len(jump['party'])>1: # errors on both parties
+#             overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
+            
+#             if len(overlap)>0:
+#                 error['jointSkip']=True
+#             '''
+#             Detect if only one timetagger jumped. This is an error.
+#             '''
+#             for party in jump['jumpInfo']:
+#                 if party=='alice':
+#                     indx = a_ind
+#                 else:
+#                     indx = b_ind
+#                 mask = np.ones(len(ji[party]['position']), dtype=bool)
+#                 mask[indx] = False 
+#                 unique_jumps = ji[party]['position'][mask]
+#                 unique_ttags = ji[party]['ttag'][mask]
+#                 if len(unique_jumps)>0:
+#                     error['info'][party]['unique_jumps'] = unique_jumps
+#                     error['info'][party]['unique_ttags'] = unique_ttags
+#                     error['err']=True
+#                 else:
+#                     error['info'][party]['unique_jumps'] = None
+#                     error['info'][party]['unique_ttags'] = None
+
+#         else: #errors on one party
+#             error['jointSkip'] = False
+#             error['err'] = True
+#             for party in jump['jumpInfo']:
+#                 unique_jumps = ji[party]['position']
+#                 unique_ttags = ji[party]['ttag']
+#                 if len(unique_jumps)>0:
+#                     error['info'][party]['unique_jumps'] = unique_jumps
+#                     error['info'][party]['unique_ttags'] = unique_ttags
+#                     error['err']=True
+#                 else:
+#                     error['info'][party]['unique_jumps'] = None
+#                     error['info'][party]['unique_ttags'] = None
+
+
+
+#         # Split the data along the errors locations
+#         # print('check error codes')
+#         # print('')
+#         if error['err']:
+#             raw_data_list = split_data_at_jumps(rawData, error)
+#         else: 
+#             raw_data_list = None
+
+#     return error, raw_data_list
+
+def check_for_timetagger_jump(rawData, params, syncTTagDiff):
+    # print('Starting jump check')
     jump = {'skip': False, 'jumpInfo': {}, 'err': False, 'party':[]}
     error = None
     for key in rawData:
+        ch = params[key]['channelmap']
         syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
         sync = rawData[key]['ttag'][syncBool]
+        # print(key, 'number_syncs', len(sync))
 
         diffTTags = np.abs(np.diff(sync))
         avgDiff = np.mean(diffTTags)
         scale = 1.01
         pos = np.where(diffTTags > avgDiff * scale)[0]
-        ttags = sync[pos]
+        pos_next = (np.array(pos)+1).tolist()
+        pos_prev = (np.array(pos)+1).tolist()
+        # pos_under = np.where(diffTTags < avgDiff * (2-scale))[0]
+        # print(key, 'avgDiff', avgDiff, pos, pos_under)
+        # print(diffTTags[pos], diffTTags[pos_under])
+        ttags = sync[pos+1]
 
-        if len(pos)>0:
-            jump['skip'] = True
-            jump['party'].append(key)
-            # jump['position'].append(pos[0])
-            jump['jumpInfo'][key] = {}
-            jump['jumpInfo'][key]['position'] = pos
-            jump['jumpInfo'][key]['ttag'] = ttags
-
-    if jump['skip']:
-        error = {'jointSkip':False, 'err': False, 'info':{}}
-        error['info'] = jump['jumpInfo']
-        # print('looking for errors')
-        all_jump_pos = []
-        ji = jump['jumpInfo']
-        # Compute the overlap between jump events
-        if len(jump['party'])>1: # errors on both parties
-            overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
-            
-            if len(overlap)>0:
-                error['jointSkip']=True
-            '''
-            Detect if only one timetagger jumped. This is an error.
-            '''
-            for party in jump['jumpInfo']:
-                if party=='alice':
-                    indx = a_ind
-                else:
-                    indx = b_ind
-                mask = np.ones(len(ji[party]['position']), dtype=bool)
-                mask[indx] = False 
-                unique_jumps = ji[party]['position'][mask]
-                if len(unique_jumps)>0:
-                    error['err']=True
-
-        else: #errors on one party
-            error['jointSkip'] = False
-            error['err'] = True
-        '''
-        Detect whether both timetaggers jump together. This tends not to introduce
-        errors.
-        '''
+        if key == 'alice':
+            syncBool_bob = rawData['bob']['ch'] == params['bob']['channelmap']['sync']
+            sync_bob = rawData['bob']['ttag'][syncBool_bob]
+            x = pos[1]
+            print('A:', sync[x-1:x+3])
+            print('B:', sync_bob[x-1:x+3])
+            print('diff:', 1.*np.array(sync_bob[x-1:x+3]-1.*np.array(sync[x-1:x+3])))
+            print('A sync:', diffTTags[x-1:x+3])
         
+        # print('pos', pos, 'post_next', pos_next)
+        ttags_next_sync = sync[pos_next ]
+        # print(diffTTags[pos_prev], diffTTags[pos],  diffTTags[pos_next])
+        settingChannels = [ch['setting0'], ch['setting1']]
+        settingsBool = (rawData[key]['ch'] == settingChannels[0]) | (rawData[key]['ch'] == settingChannels[1])
+        settings_ttags = rawData[key]['ttag'][settingsBool]
+
+        diffTTags_sett = np.abs(np.diff(settings_ttags))
+        avgDiff_sett = np.mean(diffTTags_sett)
+        scale = 1.01
+        pos_sett = np.where(diffTTags_sett > avgDiff_sett * scale)[0]
+        print('settings diff', pos_sett)
+        print(diffTTags_sett[pos_sett])
+        print('Sync')
+        print(diffTTags[pos])
+        print('') 
+        if key=='alice':
+            print(key, 'ttags', ttags)
+            indx_tmp = np.where(rawData[key]['ttag']>ttags[1])[0]
+            print(indx_tmp)
+
+            x = indx_tmp[1]
+            print('relevant indx_tmp',x)
+            print('nearest ttag diff',1.*rawData[key]['ttag'][x-1] -1.*rawData[key]['ttag'][x-2], rawData[key]['ttag'][x] -rawData[key]['ttag'][x-1], rawData[key]['ttag'][x+1] -rawData[key]['ttag'][x] )
+            print('x-2', rawData[key]['ttag'][x-2],'x-1:', rawData[key]['ttag'][x-1])
+            dd = 3
+            tt_diff = np.diff(rawData[key]['ttag'][x-dd:x+dd]-rawData[key]['ttag'][x-dd])
+            print('max diff', np.max(tt_diff))
+            print('')
+
+        #avgDiff_sett[pos_sett])
+        # print('ttags', ttags)
+        # print('ttags_next', ttags_next_sync)
+
+        # for i in range(len(ttags)):
+        #     if syncTTagDiff>0: # Bob's sync is first
+        #         pass 
+        #     else:
+        #         # Alice's sync is first
+        #         syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
+        #         sync = rawData[key]['ttag'][syncBool] 
+        #         tt_error = ttags[i]
+        #         indx_ttag = np.where(rawData[key]['ttag']==tt_error)[0]
+        #         print('index of tterror', indx_ttag,rawData[key][indx_ttag] )
+
+        #         x = pos[i] + i
+        #         # insert dummy trial
+        #         rawData[key] = np.insert(rawData[key], x, )
 
 
 
-        # print(overlap, x_ind, y_ind)
-        # print('')
+            # tt_error = ttags[i]
+            # x = pos[i]
+            # print('ttag diff',sync[x]-sync[x-1], sync[x+1]-sync[x], sync[x+2]-sync[x+1] )
+            # if (pos[i]+1)>=len(sync):
+            #     tt_next = rawData[key][-1]
+            # else:
+            #     tt_next = ttags_next_sync[i]
+            # # mask = (rawData[key]['ttag']>=tt_error) & (rawData[key]['ttag']<tt_next)
+            # mask = rawData[key]['ttag']>=tt_error
+            # mask_sync = mask & syncBool
 
-        # for party in jump['jumpInfo']:
-        #     n_jumps.append(len(jump['jumpInfo'][party]['position']))
-        #     all_jump_pos+=jump['jumpInfo'][party]['position'].tolist()   
-        # # print('n_jumps', n_jumps)
+            # sett_bool = []
+            # for sett in settingChannels:
+            #     sett_b = rawData[key]['ch'] == sett
+            #     sett_bool += [sett_b]
+            #     mask_sync = mask_sync | sett_b
 
-        # print('all jumps', all_jump_pos)
-        # unique_jumps = np.unique(np.array(all_jump_pos),return_inverse=False)
-        # duplicate_jumps, unique_jumps_indx = np.unique(np.array(all_jump_pos),return_inverse=True)
-        # # duplicate_jumps_indx = unique_jumps_indx>0
-        # # print('indicies:', duplicate_jumps_indx, unique_jumps_indx)
-        # # duplicate_jumps = np.array(all_jump_pos)[duplicate_jumps_indx]
-        # print('duplicate jumps', duplicate_jumps, 'unique_jumps', unique_jumps)
-        # if len(unique_jumps)>0:
-        #     # print('In jumps, ERROR')
-        #     error['err']=True
-        # if len(duplicate_jumps)>0:
-        #     # both syncs skip together
-        #     error['jointSkip']=True
+            # jump_amount = int(diffTTags[pos[i]] - avgDiff)
+            # jump_amount = 25759
+            # # rawData[key]['ttag'][mask] = rawData[key]['ttag'][mask]-jump_amount 
+            # rawData[key]['ttag'][mask] -= jump_amount 
 
 
-        # if len(n_jumps)>1:
-        #     n_jumps_diff = np.abs(np.diff(np.array(n_jumps)))
-        #     # print('n_jumps_diff', n_jumps_diff)
-        #     diff_sum = n_jumps_diff.sum()
-        #     # print('diff_sum', diff_sum)
-        #     if diff_sum>0:
-        #         print('In jumps, ERROR')
-        #         jump['err']=True
 
-        # if len(pos)>0:
-        #     print(pos)
-        #     mask = np.array([True]*len(rawData[key]))
-        #     # print('mask', mask)
-        #     mask[pos]=False 
-        #     syncBool[pos] = False
-        #     goodSync = rawData[key]['ttag'][syncBool]
-        #     diffTTagsGood = np.abs(np.diff(goodSync))
-        #     avgDiffGood = np.mean(diffTTagsGood)
-        #     # jump[key] = pos 
 
-        #     # ttagDiff = sync - sync[0] - avgDiffGood
-        #     diffTTagsGood = np.diff(sync) - avgDiffGood
-        #     print('diffTTagsGood',diffTTagsGood)
 
-        #     # for p in pos:
-        #     #     syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
-        #     #     ttagJump = rawData[key]['ttag'][p]
-        #     #     maskJump = rawData[key]['ttag'][syncBool]>= ttagJump
-        #     #     jumpOffset = diffTTagsGood[p]
-        #     #     print('jumpOffset', jumpOffset)
-        #     #     syncs = rawData[key]['ttag'][syncBool]
-        #     #     syncs[maskJump]=syncs[maskJump]-jumpOffset
-        #     data = rawData[key]['ttag']
-        #     for i,p in enumerate(pos):
-        #         # ttagJump = rawData[key]['ttag'][p]
-        #         # print(key, i, p)
+            # indx = np.where(mask==True)
+            # rawData[key] = np.delete(rawData[key],mask)
+            # rawData[key]['ttag']
+            # for tt in rawData[key][mask]
 
-        #         ttagJump = ttags[i]
-        #         try:
-        #             ttagEndJump = ttags[i+1]
-        #         except:
-        #             ttagEndJump = data[-1]
-        #         maskJump = (rawData[key]['ttag']>= ttagJump) & (rawData[key]['ttag']<ttagEndJump)
-        #         jumpOffset = diffTTagsGood[p]
-        #         # print('jumpOffset', jumpOffset, maskJump, ttagJump)
-                
-        #         # rawData[key]= rawData[key][maskJump]
 
-        #         # data=data[maskJump]
-        #         data[maskJump]=data[maskJump]-jumpOffset 
-        #         # syncBool = rawData[key]['ch'] == params[key]['channelmap']['sync']
-        #         # syncs = rawData[key]['ttag'][syncBool]
-        #         # sync[p] = sync[p]-jumpOffset 
+    #     if len(pos)>0:
+    #         jump['skip'] = True
+    #         jump['party'].append(key)
+    #         # jump['position'].append(pos[0])
+    #         jump['jumpInfo'][key] = {}
+    #         jump['jumpInfo'][key]['position'] = pos
+    #         jump['jumpInfo'][key]['ttag'] = ttags
 
-    
-    
+    # if jump['skip']:
+    #     error = {'jointSkip':False, 'err': False, 'info':{}}
+    #     error['info'] = jump['jumpInfo']
+    #     # print('looking for errors')
+    #     all_jump_pos = []
+    #     ji = jump['jumpInfo']
+    #     # Compute the overlap between jump events
+    #     if len(jump['party'])>1: # errors on both parties
+    #         overlap, a_ind, b_ind = np.intersect1d(ji['alice']['position'], ji['bob']['position'], return_indices=True)
+            
+    #         if len(overlap)>0:
+    #             error['jointSkip']=True
+    #         '''
+    #         Detect if only one timetagger jumped. This is an error.
+    #         '''
+    #         for party in jump['jumpInfo']:
+    #             if party=='alice':
+    #                 indx = a_ind
+    #             else:
+    #                 indx = b_ind
+    #             mask = np.ones(len(ji[party]['position']), dtype=bool)
+    #             mask[indx] = False 
+    #             unique_jumps = ji[party]['position'][mask]
+    #             unique_ttags = ji[party]['ttag'][mask]
+    #             if len(unique_jumps)>0:
+    #                 error['info'][party]['unique_jumps'] = unique_jumps
+    #                 error['info'][party]['unique_ttags'] = unique_ttags
+    #                 error['err']=True
+    #             else:
+    #                 error['info'][party]['unique_jumps'] = None
+    #                 error['info'][party]['unique_ttags'] = None
+
+    #     else: #errors on one party
+    #         error['jointSkip'] = False
+    #         error['err'] = True
+    #         for party in jump['jumpInfo']:
+    #             unique_jumps = ji[party]['position']
+    #             unique_ttags = ji[party]['ttag']
+    #             if len(unique_jumps)>0:
+    #                 error['info'][party]['unique_jumps'] = unique_jumps
+    #                 error['info'][party]['unique_ttags'] = unique_ttags
+    #                 error['err']=True
+    #             else:
+    #                 error['info'][party]['unique_jumps'] = None
+    #                 error['info'][party]['unique_ttags'] = None
+
+
+
+    #     # Split the data along the errors locations
+    #     # print('check error codes')
+    #     # print('')
+    #     if error['err']:
+    #         raw_data_list = split_data_at_jumps(rawData, error)
+    #     else: 
+    #         raw_data_list = None
+    error = {'skip': False, 'err': False}
     return error, rawData
 
 
