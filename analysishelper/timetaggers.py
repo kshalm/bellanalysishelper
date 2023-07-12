@@ -7,14 +7,20 @@ import copy
 
 try:
     import analysishelper.coinclib as cl
-    import analysishelper.singletimetagger as tt
-    import analysishelper.analysis_library as al
-    import analysishelper.processBellData as pdbell
 except Exception:
     import coinclib as cl
+try:
+    import analysishelper.singletimetagger as tt
+except Exception:
     import singletimetagger as tt
+try:
+    import analysishelper.analysis_library as al
+except Exception:
     import analysis_library as al
-    import processBellData as pdbell
+# try:   # Circular import
+#     import analysishelper.processBellData as pdbell
+# except Exception:
+#     import processBellData as pdbell
 
 
 class TimeTaggers():
@@ -281,49 +287,50 @@ class TimeTaggers():
         counts, params = self.analyze_data(rawData, dt)
         return(counts, params)
 
-    def process_files(self, files, config):
-        parties = ['alice', 'bob']
-        fAlice = files['alice']
-        fBob = files['bob']
-        if len(fAlice) != len(fBob):
-            print('Alice and Bob need the same number of files')
-            return None
-        else:
-            nFiles = len(fAlice)
+# Leads to a circular import. Cannot put this code here
+    # def process_files(self, files, config):
+    #     parties = ['alice', 'bob']
+    #     fAlice = files['alice']
+    #     fBob = files['bob']
+    #     if len(fAlice) != len(fBob):
+    #         print('Alice and Bob need the same number of files')
+    #         return None
+    #     else:
+    #         nFiles = len(fAlice)
 
-        nSyncs = 300000
-        ttagDataStructure = np.dtype(
-            [('ch', 'u1'), ('ttag', 'u8'), ('xfer', 'u2')])
-        rawData = []
-        configArray = []
-        for i in range(nFiles):
-            dataDict = {}
-            dataDict['alice'] = np.fromfile(fAlice[i], dtype=ttagDataStructure)
-            dataDict['bob'] = np.fromfile(fBob[i], dtype=ttagDataStructure)
-            dataDict['alice']['ch'] -= 1
-            dataDict['bob']['ch'] -= 1
-            rawData.append(dataDict)
+    #     nSyncs = 300000
+    #     ttagDataStructure = np.dtype(
+    #         [('ch', 'u1'), ('ttag', 'u8'), ('xfer', 'u2')])
+    #     rawData = []
+    #     configArray = []
+    #     for i in range(nFiles):
+    #         dataDict = {}
+    #         dataDict['alice'] = np.fromfile(fAlice[i], dtype=ttagDataStructure)
+    #         dataDict['bob'] = np.fromfile(fBob[i], dtype=ttagDataStructure)
+    #         dataDict['alice']['ch'] -= 1
+    #         dataDict['bob']['ch'] -= 1
+    #         rawData.append(dataDict)
 
-        dataSync = {}
-        dataSync['alice'] = rawData[0]['alice'][0:nSyncs]
-        dataSync['bob'] = rawData[0]['bob'][0:nSyncs]
-        config, pkIdx = self.find_sync_offset2(.2, rawData=dataSync)
-        # configArray.append(config)
+    #     dataSync = {}
+    #     dataSync['alice'] = rawData[0]['alice'][0:nSyncs]
+    #     dataSync['bob'] = rawData[0]['bob'][0:nSyncs]
+    #     config, pkIdx = self.find_sync_offset2(.2, rawData=dataSync)
+    #     # configArray.append(config)
 
-        countsAll = []
-        paramsAll = []
-        chStatsAll = np.zeros((4, 4))
-        for i, data in enumerate(rawData):
-            reducedData = pdbell.analyze_data(data, config)
-            fname = 'test.dat'
-            cl.write_to_compressed_file(fname, reducedData)
-            counts = pdbell.process_counts(reducedData)
-            chStatsAll += counts
+    #     countsAll = []
+    #     paramsAll = []
+    #     chStatsAll = np.zeros((4, 4))
+    #     for i, data in enumerate(rawData):
+    #         reducedData = pdbell.analyze_data(data, config)
+    #         fname = 'test.dat'
+    #         cl.write_to_compressed_file(fname, reducedData)
+    #         counts = pdbell.process_counts(reducedData)
+    #         chStatsAll += counts
 
-        chStatsAll = chStatsAll.astype('int')
+    #     chStatsAll = chStatsAll.astype('int')
 
-        # return chStatsAll, countsAll, paramsAll
-        return chStatsAll
+    #     # return chStatsAll, countsAll, paramsAll
+    #     return chStatsAll
 
     def analyze_data(self, rawData, dt=None):
 
@@ -549,146 +556,48 @@ class TimeTaggers():
         return countsData, laserPeriod
 
 
-#######################
-
-
-# def load_config_data(fname):
-#         config_fp = open(fname,'r')
-#         config = yaml.safe_load(config_fp)
-#         config_fp.close()
-#         return config
-
-
-# def get_ch_settings(config):
-#     params = {'alice': {}, 'bob':{}}
-#     for key in params:
-#         params[key]['radius'] = config[key]['coin_radius'] - 1
-#         params[key]['channels'] = config[key]['channelmap']
-#         params[key]['pkIdx'] = config[key]['channelmap']['pkIdx']*1.
-
-#     params['divider'] = config['DIVIDER']*1.
-#     params['measureViol'] = config['measureViol']
-#     params['findPk'] = config['analysis']['findPk']
-#     return(params)
-
-# def analyze_data(rawData, config):
-#     ttagOffset = config['analysis']['ttagOffset']
-#     abDelay =config['analysis']['pulseABDelay']
-#     syncTTagDiff =config['analysis']['syncTTagDiff']
-#     usePockelsMask =config['pockelProp']['enable']
-
-#     paramsCh = get_ch_settings(config)
-#     divider = paramsCh['divider']*1.
-#     findPk = paramsCh['findPk']
-#     isTrim = True
-
-#     trimmedData = {}
-#     for party in rawData.keys():
-#         tData = cl.trim_data_single(rawData[party], paramsCh[party])
-#         trimmedData[party] = tData
-
-#     # trimmedData = rawData
-
-#     paramsSingle = copy.deepcopy(paramsCh)
-#     params = {'alice': {}, 'bob': {}}
-#     for detA in paramsCh['alice']['channels']['detector'].keys():
-#         for detB in paramsCh['bob']['channels']['detector'].keys():
-#             detKey = detA + detB
-#             detChA = paramsCh['alice']['channels']['detector'][detA]
-#             detChB = paramsCh['bob']['channels']['detector'][detB]
-#             paramsSingle['alice']['channels']['detector'] = detChA
-#             paramsSingle['bob']['channels']['detector'] = detChB
-
-#             props = cl.calc_data_properties(trimmedData, paramsSingle, divider, findPk=findPk)
-
-#     reducedData ={}
-
-#     offset = {}
-
-#     offset['alice'] = 1*abDelay
-#     offset['bob'] = 0
-#     pcStart = int(config['pockelProp']['start'])
-#     pcLength = int(config['pockelProp']['length'])+1
-
-#     for party in rawData.keys():
-#         reduced = cl.get_processed_data(trimmedData[party], props[party],
-#                                     offset[party], pcStart, pcLength)
-#         reducedData[party] = reduced
-#         cl.write_single_party_to_compressed_file(party+'_data', reduced)
-
-#     ttagOffsetDict = {}
-#     ttagOffsetDict['alice'] = 0
-#     ttagOffsetDict['bob'] = ttagOffset
-#     reducedData = cl.trim_processed_data(reducedData, ttagOffsetDict, syncTTagDiff)
-#     return reducedData
-
-# def process_counts(data):
-#     SA = data['alice']['Setting']
-#     OA = data['alice']['Outcome']
-#     SB = data['bob']['Setting']
-#     OB = data['bob']['Outcome']
-
-#     sett = [1,2]
-#     counts = []
-#     for s in sett:
-#         for j in sett:
-#             SAMask = SA==s
-#             SBMask = SB==j
-#             settingsMask = SAMask & SBMask
-#             OAMask = OA>0
-#             OBMask = OB>0
-#             # print(OA, OB)
-#             coinc = np.sum(settingsMask & OAMask & OBMask)
-#             singlesA = np.sum(settingsMask & OAMask)
-#             singlesB = np.sum(settingsMask & OBMask)
-#             nullOutcomes = np.sum(settingsMask & np.logical_not(OAMask) & np.logical_not(OBMask))
-#             res = [nullOutcomes, singlesA, singlesB, coinc]
-#             counts.append(res)
-
-#     counts = np.array(counts).astype(int)
-#     # print(counts)
-#     return counts
 if __name__ == '__main__':
-    path = '/Users/lks/Documents/BellData/2022'
-    date = '2022_03_19'
-    fileA = [
-        '2022_03_19_01_34_alice__excellent_settings_320_divider__file_1_of_21.dat']
-    # fileA = ['2022_03_11_19_37_alice__1min_chunk_violation.dat',
-    #         '2022_03_11_19_38_alice__1min_chunk_violation_2.dat']
+    pass
+    # path = '/Users/lks/Documents/BellData/2022'
+    # date = '2022_03_19'
+    # fileA = [
+    #     '2022_03_19_01_34_alice__excellent_settings_320_divider__file_1_of_21.dat']
+    # # fileA = ['2022_03_11_19_37_alice__1min_chunk_violation.dat',
+    # #         '2022_03_11_19_38_alice__1min_chunk_violation_2.dat']
 
-    fileB = ['2022_03_19_01_34_bob__excellent_settings_320_divider__file_1_of_21.dat']
-    # fileB = ['2022_03_11_19_37_bob__1min_chunk_violation.dat',
-    #         '2022_03_11_19_38_bob__1min_chunk_violation_2.dat']
+    # fileB = ['2022_03_19_01_34_bob__excellent_settings_320_divider__file_1_of_21.dat']
+    # # fileB = ['2022_03_11_19_37_bob__1min_chunk_violation.dat',
+    # #         '2022_03_11_19_38_bob__1min_chunk_violation_2.dat']
 
-    # fileA = ['2022_03_11_23_12_alice__80_percent_check_60s_.dat']
-    # fileB = ['2022_03_11_23_12_bob__80_percent_check_60s_.dat']
-    # fAlice = path+'/Alice/'+date+'/'+fileA
-    # fBob = path+'/Bob/'+date+'/'+fileB
+    # # fileA = ['2022_03_11_23_12_alice__80_percent_check_60s_.dat']
+    # # fileB = ['2022_03_11_23_12_bob__80_percent_check_60s_.dat']
+    # # fAlice = path+'/Alice/'+date+'/'+fileA
+    # # fBob = path+'/Bob/'+date+'/'+fileB
 
-    files = {}
-    files['alice'] = []
-    files['bob'] = []
-    for i in range(len(fileA)):
-        fAlice = path+'/Alice/'+date+'/'+fileA[i]
-        fBob = path+'/Bob/'+date+'/'+fileB[i]
-        files['alice'].append(fAlice)
-        files['bob'].append(fBob)
+    # files = {}
+    # files['alice'] = []
+    # files['bob'] = []
+    # for i in range(len(fileA)):
+    #     fAlice = path+'/Alice/'+date+'/'+fileA[i]
+    #     fBob = path+'/Bob/'+date+'/'+fileB[i]
+    #     files['alice'].append(fAlice)
+    #     files['bob'].append(fBob)
 
-    configFile = '../config/client.yaml'
-    config = pdbell.load_config_data(configFile)
+    # configFile = '../config/client.yaml'
+    # config = pdbell.load_config_data(configFile)
 
-    tt = TimeTaggers(config, offline=True)
-    # chStatsAll, countsAll, paramsAll = tt.process_files(files, config)
-    chStatsAll = tt.process_files(files, config)
-    # print(chStatsAll)
-    print('')
+    # tt = TimeTaggers(config, offline=True)
+    # # chStatsAll, countsAll, paramsAll = tt.process_files(files, config)
+    # chStatsAll = tt.process_files(files, config)
+    # # print(chStatsAll)
+    # print('')
 
-    CH, CHn, ratio, pValue = cl.calc_violation(chStatsAll)
+    # CH, CHn, ratio, pValue = cl.calc_violation(chStatsAll)
 
-    # print('connecting')
-    # tt = TimeTaggers()
-    # stats = tt.get_stats()
-    # print('stats', stats)
+    # # print('connecting')
+    # # tt = TimeTaggers()
+    # # stats = tt.get_stats()
+    # # print('stats', stats)
 
-    # counts, params = tt.update()
-    # print(counts)
+    # # counts, params = tt.update()
+    # # print(counts)

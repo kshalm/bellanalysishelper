@@ -116,11 +116,10 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
         err = True
         return trimmedData, err
 
+    dtype = data['alice']['ttag'].dtype
     aData = data['alice']['ttag']
-    # event number for all bob tags, corrected for delay
-    # bData = data['bob']['ttag'] + ttagOffset
     bData = 1.*data['bob']['ttag'] + 1.*ttagOffset # event number for all bob tags, corrected for delay
-    bData = bData.astype('int')
+    bData = bData.astype(dtype)
 
     startTTag = max(aData[0], bData[0])
     # print('startTTag', startTTag)
@@ -164,7 +163,7 @@ def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
     trimmedData['alice']['ttag'] = trimmedData['alice']['ttag']-(startTTag)
     # trimmedData['bob']['ttag'] = trimmedData['bob']['ttag']-(startTTag)+ttagOffset
     trimmedData['bob']['ttag'] = 1.*trimmedData['bob']['ttag']-(startTTag)+ttagOffset
-    trimmedData['bob']['ttag'] = trimmedData['bob']['ttag'].astype('int')
+    trimmedData['bob']['ttag'] = trimmedData['bob']['ttag'].astype(dtype)
 
     # Make sure each dataset has the same number of sync pulses / trials
     nSyncs = {}

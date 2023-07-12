@@ -1,11 +1,7 @@
 import numpy as np
 import logging
-# import scipy.signal
 from scipy.stats import binom
-# from scipy.stats import mode
-# from numba import jit
 import scipy
-# @jit
 
 
 def calcSettings(det, key, syncArray, ch0=2, ch1=4):
@@ -19,8 +15,6 @@ def calcSettings(det, key, syncArray, ch0=2, ch1=4):
 
     # , 'setting0Bool': setting0Bool, 'setting1Bool': setting1Bool}
     return({'settings': settings})
-
-# @jit
 
 
 def calc_period(det, divider=800, syncCh=6):

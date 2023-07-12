@@ -4,15 +4,16 @@ import copy
 import yaml
 import os
 import base64
-import coinclib as cl
-import timetaggers as tt
-# try:
-#     import analysishelper.coinclib as cl
-#     # import coinclib as cl
-#     import analysishelper.timetaggers as tt
-# except Exception:
-#     import coinclib as cl
-#     import timetaggers as tt
+# import coinclib as cl
+# import timetaggers as tt
+try:
+    import analysishelper.coinclib as cl
+except Exception:
+    import coinclib as cl
+try:
+    import analysishelper.timetaggers as tt
+except Exception:
+    import timetaggers as tt
 
 
 def process_single_run(files, aggregate=True, findSync=False):
@@ -37,12 +38,10 @@ def process_single_run(files, aggregate=True, findSync=False):
     if rollover['err']:
         errors['rollover'] = True
         print('ERROR: Timetagger rollover detected')
-    # print('rollover', rollover)
-    # print('')
-    
+
     reducedData, err = analyze_data(rawData, timeTaggers.config)
     if err is not None:
-        for k,v in err.items():
+        for k, v in err.items():
             errors[k] = v
 
     if 'output' in files:
@@ -90,10 +89,9 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
     else:
         nFiles = len(fAlice)
     rawData = []
-    configArray = []
 
     chStatsAll = np.zeros((4, 4))
-    errors=[]
+    errors = []
 
     for i in range(1, nFiles):
         print('starting: ', fAlice[i])
@@ -121,6 +119,7 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
 def check_for_detector_going_normal(ttags):
     pass
 
+
 def trim_and_check_for_jumps(rawData, config):
     errors = None
     ttagOffset = config['analysis']['ttagOffset']
@@ -128,7 +127,8 @@ def trim_and_check_for_jumps(rawData, config):
     syncTTagDiff = config['analysis']['syncTTagDiff']
     paramsCh = get_ch_settings(config)
 
-    print('ttagOffset:', ttagOffset, 'abDelay:', abDelay, 'syncTTagDiff', syncTTagDiff)
+    print('ttagOffset:', ttagOffset, 'abDelay:',
+          abDelay, 'syncTTagDiff', syncTTagDiff)
 
     err, rawData = cl.check_for_timetagger_jump(rawData, config, syncTTagDiff)
     # Trim data
@@ -216,7 +216,7 @@ def analyze_data(rawData, config):
     #                 trimmedData[party] = np.hstack((trimmedData[party], td[party]))
     paramsCh = get_ch_settings(config)
     paramsCh = get_ch_settings(config)
-    divider = paramsCh['divider']*1.
+    divider = paramsCh['divider'] * 1.
     findPk = paramsCh['findPk']
     usePockelsMask = config['pockelProp']['enable']
     abDelay = config['analysis']['pulseABDelay']
@@ -240,10 +240,10 @@ def analyze_data(rawData, config):
 
     offset = {}
 
-    offset['alice'] = 1*abDelay
+    offset['alice'] = 1 * abDelay
     offset['bob'] = 0
     pcStart = int(config['pockelProp']['start'])
-    pcLength = int(config['pockelProp']['length'])+1
+    pcLength = int(config['pockelProp']['length']) + 1
 
     for party in rawData.keys():
         reduced = cl.get_processed_data(trimmedData[party], props[party],
@@ -285,9 +285,9 @@ def get_ch_settings(config):
     for key in params:
         params[key]['radius'] = config[key]['coin_radius'] - 1
         params[key]['channels'] = config[key]['channelmap']
-        params[key]['pkIdx'] = config[key]['channelmap']['pkIdx']*1.
+        params[key]['pkIdx'] = config[key]['channelmap']['pkIdx'] * 1.
 
-    params['divider'] = config['DIVIDER']*1.
+    params['divider'] = config['DIVIDER'] * 1.
     params['measureViol'] = config['measureViol']
     params['findPk'] = config['analysis']['findPk']
     return(params)
@@ -328,7 +328,7 @@ def get_files_in_folder(path):
 
     for i, s in enumerate(files):
         if 'alice' in s:
-            s = path+'/'+s
+            s = path + '/' + s
             filesAlice.append(s)
             filesBob.append(s.replace('alice', 'bob'))
             # filesConfig.append(s.replace('alice', 'config').replace('.dat', '.yaml'))
@@ -339,7 +339,6 @@ def get_files_in_folder(path):
     filesOut['bob'] = filesBob
     filesOut['config'] = filesConfig
 
-
     return filesOut
 
 
@@ -347,14 +346,14 @@ def main():
     path = '/Users/lks/Documents/BellData/2022/'
     date = '2022_10_06'
 
-    files = get_files_in_folder(path+date)
+    files = get_files_in_folder(path + date)
     files['output'] = []
 
     for i in range(len(files['alice'])):
         fNameOut = files['bob'][i].replace('_bob', '').replace('.dat', '')
         fNameOut += '.bin.zip'
         fNameOut = fNameOut.split('/')[-1]
-        fOut = path+'processed/test2/'+date+'/'+fNameOut
+        fOut = path + 'processed/test2/' + date + '/' + fNameOut
         files['output'].append(fOut)
         # print(fOut)
 
