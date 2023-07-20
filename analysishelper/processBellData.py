@@ -1,11 +1,8 @@
 import numpy as np
 import copy
-# import zlib
 import yaml
 import os
 import base64
-# import coinclib as cl
-# import timetaggers as tt
 try:
     import analysishelper.coinclib as cl
 except Exception:
@@ -33,7 +30,7 @@ def process_single_run(files, aggregate=True, findSync=False):
     if findSync:
         rawData, timeTaggers = find_ttag_offset(timeTaggers, rawData)
 
-    print('starting rollover detection')
+    print('Starting rollover detection')
     rollover = cl.check_for_timetagger_roll_over(rawData, timeTaggers.config)
     if rollover['err']:
         errors['rollover'] = True
@@ -94,7 +91,7 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
     errors = []
 
     for i in range(1, nFiles):
-        print('starting: ', fAlice[i])
+        print('Starting: ', fAlice[i])
         rawData = []
         filesForSingleRun = {}
         for key, fileArray in filesForSingleRun.items():
@@ -127,93 +124,56 @@ def trim_and_check_for_jumps(rawData, config):
     syncTTagDiff = config['analysis']['syncTTagDiff']
     paramsCh = get_ch_settings(config)
 
-    print('ttagOffset:', ttagOffset, 'abDelay:',
-          abDelay, 'syncTTagDiff', syncTTagDiff)
-
-    err, rawData = cl.check_for_timetagger_jump(rawData, config, syncTTagDiff)
     # Trim data
+    print("Starting trim data procedure")
     trimmedData, err = cl.trim_data(
         rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
 
-    # err, trimmedData = cl.check_for_timetagger_jump(trimmedData, config, syncTTagDiff)
-    # trimmedData, err = cl.trim_data(
-    #             trimmedData, 0, abDelay, syncTTagDiff, paramsCh)
-
-    # err, trimmedData = cl.check_for_timetagger_jump(trimmedData, config)
-
     # # check for jumps
+    print("Starting jump detection")
     # err, raw_data_list = cl.check_for_timetagger_jump(trimmedData, config)
-    # if err is not None:
-    #     errors = {}
-    #     errors['ttagJump']={}
-    #     for k,v in err.items():
-    #         errors['ttagJump'][k] = v
-    #         if (k=='err') and (v==True):
-    #             print('ERROR: Timetagger jump detected.')
+    err = cl.check_for_timetagger_jump(trimmedData, config)
 
-    # # If a jump error is detected, correct the data.
-    # if (err is not None) & (err['err']):
-    #     trimmed_data_list = []
-    #     for data in raw_data_list:
-    #         # Trim each data segment
-    #         td, err_trim = cl.trim_data(
-    #             data, 0, abDelay, syncTTagDiff, paramsCh)
-    #         trimmed_data_list.append(td)
+    if (err is None):
+        return errors, trimmedData
 
-    #     # concatenate back together each data segment.
-    #     trimmedData = None
-    #     for td in trimmed_data_list:
-    #         if trimmedData is None:
-    #             trimmedData = td
-    #         else:
-    #             for party in rawData:
-    #                 trimmedData[party] = np.hstack((trimmedData[party], td[party]))
+    errors = {}
+    errors['ttagJump'] = {}
+    for k, v in err.items():
+        errors['ttagJump'][k] = v
+        if (k == 'err') and (v == True):
+            print('ERROR: Timetagger jump detected.')
+
+    '''
+    If unique jumps are present, then split the data up at the jump points
+    '''
+    if err['err']:
+        data_list_split_at_jumps = cl.split_data_at_jumps(trimmedData, err)
+    else:
+        return errors, trimmedData
+
+    if (trimmedData is not None) & (data_list_split_at_jumps is not None):
+        trimmed_data_list = []
+        for data in data_list_split_at_jumps:
+            # Trim each data segment. Here ttagoffset is 0 due to initial trimming
+            td, err_trim = cl.trim_data(
+                data, 0, abDelay, syncTTagDiff, paramsCh)
+            trimmed_data_list.append(td)
+
+        # concatenate back together each data segment.
+        trimmedData = None
+        for td in trimmed_data_list:
+            if trimmedData is None:
+                trimmedData = td
+            else:
+                for party in rawData:
+                    trimmedData[party] = np.hstack(
+                        (trimmedData[party], td[party]))
 
     return errors, trimmedData
 
 
 def analyze_data(rawData, config):
-    # errors = None
-    # ttagOffset = config['analysis']['ttagOffset']
-    # abDelay = config['analysis']['pulseABDelay']
-    # syncTTagDiff = config['analysis']['syncTTagDiff']
-    # usePockelsMask = config['pockelProp']['enable']
-
-    # paramsCh = get_ch_settings(config)
-    # divider = paramsCh['divider']*1.
-    # findPk = paramsCh['findPk']
-    # isTrim = True
-
-    # trimmedData, err = cl.trim_data(
-    #     rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
-
-    # #check for timetagger jumps
-    # err, raw_data_list = cl.check_for_timetagger_jump(trimmedData, config)
-    # if err is not None:
-    #     errors = {}
-    #     errors['ttagJump']={}
-    #     for k,v in err.items():
-    #         errors['ttagJump'][k] = v
-    #         if (k=='err') and (v==True):
-    #             print('ERROR: Timetagger jump detected.')
-
-    # # If a jump error is detected, correct the data.
-    # if (err is not None) & (err['err']):
-    #     trimmed_data_list = []
-    #     for data in raw_data_list:
-    #         # Trim each data segment
-    #         td, err_trim = cl.trim_data(
-    #             data, 0, abDelay, syncTTagDiff, paramsCh)
-    #         trimmed_data_list.append(td)
-
-    #     # concatenate back together each data segment.
-    #     trimmedData = None
-    #     for td in trimmed_data_list:
-    #         if trimmedData is None:
-    #             trimmedData = td
-    #         else:
-    #             for party in rawData:
-    #                 trimmedData[party] = np.hstack((trimmedData[party], td[party]))
     paramsCh = get_ch_settings(config)
     paramsCh = get_ch_settings(config)
     divider = paramsCh['divider'] * 1.
