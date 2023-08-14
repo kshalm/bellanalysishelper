@@ -1,3 +1,3 @@
-## Bell Helpers
+## Analysis Helpers
 
-Helper functions for the Bell test
+Connect to timetaggers and process timetag data.
