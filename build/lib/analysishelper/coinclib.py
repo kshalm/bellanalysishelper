@@ -301,8 +301,8 @@ def calc_period(det, divider=800, syncCh=6, maxPeriod=170):
 
     laserPeriodArray = np.append(laserPeriodArray, laserPeriodArray[-1])
     laserPeriod = np.mean(laserPeriodArray[laserPeriodArray < maxPeriod])
-    errorLP = np.where(laserPeriodArray > maxPeriod)
-    laserPeriodArray[errorLP] = laserPeriodArray[np.roll(errorLP, -1)]
+    # errorLP = np.where(laserPeriodArray > maxPeriod)
+    # laserPeriodArray[errorLP] = laserPeriodArray[np.roll(errorLP, -1)]
     return(laserPeriod, laserPeriodArray)
 
 # @jit
