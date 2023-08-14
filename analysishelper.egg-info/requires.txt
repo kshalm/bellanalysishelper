@@ -1,0 +1,5 @@
+pyyaml
+zmqhelper@ git+https://github.com/kshalm/zmqhelpers
+numpy
+scipy
+numba
