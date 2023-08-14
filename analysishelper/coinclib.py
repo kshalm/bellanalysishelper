@@ -301,8 +301,8 @@ def calc_period(det, divider=800, syncCh=6, maxPeriod=170):
 
     laserPeriodArray = np.append(laserPeriodArray, laserPeriodArray[-1])
     laserPeriod = np.mean(laserPeriodArray[laserPeriodArray < maxPeriod])
-    errorLP = np.where(laserPeriodArray > maxPeriod)
-    laserPeriodArray[errorLP] = laserPeriodArray[np.roll(errorLP, -1)]
+    # errorLP = np.where(laserPeriodArray > maxPeriod)
+    # laserPeriodArray[errorLP] = laserPeriodArray[np.roll(errorLP, -1)]
     return(laserPeriod, laserPeriodArray)
 
 # @jit
@@ -876,6 +876,7 @@ def calc_convolution(y1, y2):
     y1 = y1 - np.average(y1)
     y2 = y2 - np.average(y2)
     convolution = scipy.signal.fftconvolve(y1, y2[::-1])
+    convolution = np.abs(convolution)
     convDelay = np.argmax(convolution) - (len(y2) - 1)
     convMax = np.max(convolution)
     return convolution, convDelay, convMax
@@ -1005,8 +1006,104 @@ def calc_offset(data, params, divider):
     ret['ttagOffset'] = ttagOffset
     ret['syncTTagDiff'] = syncTTagDiff
     ret['pkIdx'] = peakIdx
+    print('TTAGOFFSET', ttagOffset)
 
     return ret
+
+# def calc_offset_timetags_only(data, params, divider): 
+#     DIVIDER = divider
+#     props = calc_data_properties(data, params, divider=divider, findPk=True) 
+#     alice_first_detection = data['alice']['ttag'][0]
+#     bob_first_detection = data['bob']['ttag'][0]
+
+#     alice_valid_detection = props['alice']['clickBool']
+#     alice_time_tags = data['alice']['ttag'][alice_valid_detection]#-alice_first_detection
+#     bob_valid_detection = props['bob']['clickBool']
+#     bob_time_tags = data['bob']['ttag'][bob_valid_detection]#-bob_first_detection
+
+#     # y1 = alice_valid_detection-(1.*np.sum(alice_valid_detection)/(1.*len(alice_valid_detection)))
+#     # y2 = bob_valid_detection-(1.*np.sum(bob_valid_detection)/(1.*len(bob_valid_detection)))
+#     y1 = alice_time_tags
+#     y2 = bob_time_tags
+
+#     convolution, relative_delay, max_convolution_value = calc_convolution(y1,y2)
+#     print('convolution results:',relative_delay, max_convolution_value)
+#     # offsetVals = np.where(convolution > max_convolution_value * 0.9)[0]
+#     # print('OFFSET VALS', relative_delay, len(offsetVals), convolution[offsetVals])
+#     # print('Convolution', convolution[relative_delay])
+
+#     index_correction = 0
+#     if relative_delay<0:
+#         relative_delay -= index_correction
+#         start_index = int(np.abs(relative_delay))
+#         # Alice's timetag occurs first in the list. Therefore need to remove the first set of timetags from Bob
+#         bob_time_tags = bob_time_tags[start_index:-1]
+#     else:
+#         relative_delay = int(np.abs(relative_delay))
+#         relative_delay -= index_correction
+#         start_index = relative_delay
+#         alice_time_tags = alice_time_tags[start_index:-1]
+
+#     total_length = min(len(alice_time_tags), len(bob_time_tags))-1
+#     alice_time_tags = alice_time_tags[0:total_length]
+#     bob_time_tags = bob_time_tags[0:total_length]
+
+#     # Now we should have a somewhat correct set. 
+#     number_detections = 200
+    
+#     alice_first_n_detections = (alice_time_tags[0:number_detections] - alice_time_tags[0]).astype(int)
+#     bob_first_n_detections = (bob_time_tags[0:number_detections] - bob_time_tags[0]).astype(int)
+
+#     print( alice_first_n_detections[-1], bob_first_n_detections[-1])
+#     alice_timestamps = np.zeros(alice_first_n_detections[-1]+1)
+#     bob_timestamps = np.zeros(bob_first_n_detections[-1]+1)
+
+#     print(alice_first_n_detections, bob_first_n_detections)
+#     print(len(alice_timestamps), len(bob_timestamps))
+
+#     alice_timestamps[alice_first_n_detections] = 1
+#     bob_timestamps[bob_first_n_detections] = 1
+
+#     convolution, relative_delay, max_convolution_value = calc_convolution(alice_timestamps,bob_timestamps)
+#     print('Convolution result', relative_delay, max_convolution_value)
+#     # if alice_time_tags[0]>bob_time_tags[0]:
+#     #     difference_in_timetags = alice_time_tags - bob_time_tags
+#     #     sign_of_difference_in_timetags = 1
+#     # else: 
+#     #     difference_in_timetags = bob_time_tags - alice_time_tags
+#     #     sign_of_difference_in_timetags = -1
+#     # avg_difference_in_timetags = np.average(difference_in_timetags)
+
+#     # offset = int(avg_difference_in_timetags)
+
+#     # if sign_of_difference_in_timetags<0:
+#     #     alice_time_tags+=offset
+#     # else:
+#     #     bob_time_tags+=offset
+
+#     # coinc = np.intersect1d(alice_time_tags, bob_time_tags).astype(int)
+
+#     # # real_correction = -297085296596
+#     # # alice_time_tags = data['alice']['ttag'][alice_valid_detection]#-alice_first_detection
+#     # # bob_time_tags = data['bob']['ttag'][bob_valid_detection]#-bob_first_detection
+
+#     # # alice_time_tags += int(np.abs(real_correction))
+
+#     # # first_ttag = max(alice_time_tags[0], bob_time_tags[0])
+#     # # alice_time_tags = alice_time_tags[alice_time_tags>first_ttag]
+#     # # bob_time_tags = bob_time_tags[bob_time_tags>first_ttag]
+#     # # print('try correction')
+#     # # print(alice_time_tags[0:20],'\n')
+#     # # print(bob_time_tags[0:20])
+
+#     # print('ttag difference', avg_difference_in_timetags, difference_in_timetags)
+#     # print('')
+#     # print('coinc', coinc, offset, sign_of_difference_in_timetags)
+
+
+#     # print('average difference in timestamps', avg_difference_in_timetags, sign_of_difference_in_timetags)
+#     # print(alice_time_tags[0:100])
+#     # print(bob_time_tags[0:20])
 
 
 def calc_violation(stats):

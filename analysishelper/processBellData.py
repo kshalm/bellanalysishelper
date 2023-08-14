@@ -3,17 +3,20 @@ import copy
 import yaml
 import os
 import base64
-try:
-    import analysishelper.coinclib as cl
-except Exception:
-    import coinclib as cl
-try:
-    import analysishelper.timetaggers as tt
-except Exception:
-    import timetaggers as tt
+import timetaggers as tt
+import coinclib as cl
+# try:
+#     import analysishelper.coinclib as cl
+# except Exception:
+#     import coinclib as cl
+# try:
+#     import analysishelper.timetaggers as tt
+# except Exception:
+#     import timetaggers as tt
 
 
 def process_single_run(files, aggregate=True, findSync=False):
+    print('value of findSync', findSync)
     errors = {}
     ttagDataStructure = np.dtype(
         [('ch', 'u1'), ('ttag', 'u8'), ('xfer', 'u2')])
@@ -62,7 +65,9 @@ def find_ttag_offset(timeTaggers, rawData):
     rawData['alice'] = rawData['alice'][nSyncs:-1]
     rawData['bob'] = rawData['bob'][nSyncs:-1]
 
+    print('About to find offset')
     config, pkIdx = timeTaggers.find_sync_offset2(.2, rawData=dataSync)
+
     for p in pkIdx:
         config[p]['channelmap']['pkIdx'] = pkIdx[p]
 
@@ -102,7 +107,7 @@ def process_multiple_data_runs(files, aggregate=True, findSync=False):
         # filesForSingleRun['config'] = fConfig[i]
         # filesForSingleRun
         counts, compressedData, err = process_single_run(
-            filesForSingleRun, aggregate=aggregate)
+            filesForSingleRun, aggregate=aggregate, findSync=findSync)
         errors.append(err)
 
         chStatsAll += counts.astype('int')

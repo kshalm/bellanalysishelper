@@ -4,19 +4,23 @@ import yaml
 from multiprocessing import Queue  # , Process
 import threading
 import copy
+import coinclib as cl
+import analysis_library as al
+import singletimetagger as tt
 
-try:
-    import analysishelper.coinclib as cl
-except Exception:
-    import coinclib as cl
-try:
-    import analysishelper.singletimetagger as tt
-except Exception:
-    import singletimetagger as tt
-try:
-    import analysishelper.analysis_library as al
-except Exception:
-    import analysis_library as al
+
+# try:
+#     import analysishelper.coinclib as cl
+# except Exception:
+#     import coinclib as cl
+# try:
+#     import analysishelper.singletimetagger as tt
+# except Exception:
+#     import singletimetagger as tt
+# try:
+#     import analysishelper.analysis_library as al
+# except Exception:
+#     import analysis_library as al
 
 
 class TimeTaggers():
