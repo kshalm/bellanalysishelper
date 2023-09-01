@@ -3,16 +3,16 @@ import copy
 import yaml
 import os
 import base64
-import timetaggers as tt
-import coinclib as cl
-# try:
-#     import analysishelper.coinclib as cl
-# except Exception:
-#     import coinclib as cl
-# try:
-#     import analysishelper.timetaggers as tt
-# except Exception:
-#     import timetaggers as tt
+# import timetaggers as tt
+# import coinclib as cl
+try:
+    import analysishelper.coinclib as cl
+except Exception:
+    import coinclib as cl
+try:
+    import analysishelper.timetaggers as tt
+except Exception:
+    import timetaggers as tt
 
 
 def process_single_run(files, aggregate=True, findSync=False):
@@ -255,7 +255,7 @@ def get_ch_settings(config):
     params['divider'] = config['DIVIDER'] * 1.
     params['measureViol'] = config['measureViol']
     params['findPk'] = config['analysis']['findPk']
-    return(params)
+    return (params)
 
 
 def load_config_data(fname):

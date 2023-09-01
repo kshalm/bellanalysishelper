@@ -4,23 +4,23 @@ import yaml
 from multiprocessing import Queue  # , Process
 import threading
 import copy
-import coinclib as cl
-import analysis_library as al
-import singletimetagger as tt
+# import coinclib as cl
+# import analysis_library as al
+# import singletimetagger as tt
 
 
-# try:
-#     import analysishelper.coinclib as cl
-# except Exception:
-#     import coinclib as cl
-# try:
-#     import analysishelper.singletimetagger as tt
-# except Exception:
-#     import singletimetagger as tt
-# try:
-#     import analysishelper.analysis_library as al
-# except Exception:
-#     import analysis_library as al
+try:
+    import analysishelper.coinclib as cl
+except Exception:
+    import coinclib as cl
+try:
+    import analysishelper.singletimetagger as tt
+except Exception:
+    import singletimetagger as tt
+try:
+    import analysishelper.analysis_library as al
+except Exception:
+    import analysis_library as al
 
 
 class TimeTaggers():
@@ -93,14 +93,14 @@ class TimeTaggers():
             filename = self.timeTaggers[key].start_logging_to_file(
                 key + '_' + filestr)
             files[key] = filename
-        return(files)
+        return (files)
 
     def log_stop_twottag(self):
         files = {}
         for key in self.timeTaggers.keys():
             fn = self.timeTaggers[key].stop_logging_to_file()
             files[key] = fn
-        return(files)
+        return (files)
 
     def close(self):
         for key in self.timeTaggers.keys():
@@ -135,7 +135,7 @@ class TimeTaggers():
         if self.singleServer:
             tableDict['bob'] = tableDict['alice']
 
-        return(tableDict)
+        return (tableDict)
 
     def _fetch_stats(self, ttagger, dt, q):
         counts = ttagger.get_stats(dt)
@@ -172,7 +172,7 @@ class TimeTaggers():
 
             # except Exception:
             #     rawData[key] = None
-        return(rawData)
+        return (rawData)
 
     def get_ch_settings(self):
         params = {'alice': {}, 'bob': {}}
@@ -186,12 +186,12 @@ class TimeTaggers():
         params['divider'] = self.config['DIVIDER'] * 1.
         params['measureViol'] = self.config['measureViol']
         params['findPk'] = self.config['analysis']['findPk']
-        return(params)
+        return (params)
 
     def find_pc_turn_on_off(self, intTime):
 
         rawData = self.fetch_data(intTime)
-        #rawData['bob'] = rawData['alice']
+        # rawData['bob'] = rawData['alice']
 
         # Next, with the data, trim it and find the offsets
         paramsCh = self.get_ch_settings()
@@ -222,7 +222,7 @@ class TimeTaggers():
         config_fp = open(self.configFile, 'w')
         yaml.dump(config, config_fp, default_flow_style=False)
         config_fp.close()
-        return(pcSS)
+        return (pcSS)
 
     def find_sync_offset2(self, intTime, rawData=None):
 
@@ -285,7 +285,7 @@ class TimeTaggers():
         rawData = self.fetch_data(timeToFetch)
 
         counts, params = self.analyze_data(rawData, dt)
-        return(counts, params)
+        return (counts, params)
 
     def analyze_data(self, rawData, dt=None):
 
@@ -369,7 +369,7 @@ class TimeTaggers():
                     params['alice']['plotPA']['shadedRegion'] = None
                     params['bob']['plotPB']['shadedRegion'] = None
         # print(paramsPockels)
-        return(counts, params, reducedDataSet)
+        return (counts, params, reducedDataSet)
 
     def get_pockels_mask(self, data, props):
         abDelay = self.config['analysis']['pulseABDelay']
