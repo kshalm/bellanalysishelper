@@ -39,7 +39,7 @@ def process_single_run(files, aggregate=True, findSync=False):
         errors['rollover'] = True
         print('ERROR: Timetagger rollover detected')
 
-    reducedData, err = analyze_data(rawData, timeTaggers.config)
+    reducedData, err, info = analyze_data(rawData, timeTaggers.config)
     if err is not None:
         for k, v in err.items():
             errors[k] = v
@@ -53,7 +53,8 @@ def process_single_run(files, aggregate=True, findSync=False):
 
     counts = process_counts(reducedData)
     counts = counts.astype('int')
-    return counts, compressedData, errors
+    print(info)
+    return counts, compressedData, errors, info
 
 
 def find_ttag_offset(timeTaggers, rawData):
@@ -122,13 +123,30 @@ def check_for_detector_going_normal(ttags):
     pass
 
 
+def check_starting_gun(trimmedData, ch_alice, ch_bob):
+    alice_start_gun_mask = trimmedData['alice']['ch'] == ch_alice
+    bob_start_gun_mask = trimmedData['bob']['ch'] == ch_bob
+    alice_ttags_gun = trimmedData['alice']['ttag'][alice_start_gun_mask]
+    bob_ttags_gun = trimmedData['bob']['ttag'][bob_start_gun_mask]
+    if len(alice_ttags_gun) != len(bob_ttags_gun):
+        length = np.min(len(alice_ttags_gun), len(bob_ttags_gun))
+        alice_ttags_gun = alice_ttags_gun[:length]
+        bob_ttags_gun = bob_ttags_gun[:length]
+
+    diffs = bob_ttags_gun - alice_ttags_gun
+    minimum = np.min(diffs)
+    maximum = np.max(diffs)
+    return [minimum, maximum]
+
+
 def trim_and_check_for_jumps(rawData, config):
     errors = None
     ttagOffset = config['analysis']['ttagOffset']
     abDelay = config['analysis']['pulseABDelay']
     syncTTagDiff = config['analysis']['syncTTagDiff']
     paramsCh = get_ch_settings(config)
-
+    ch_start_gun_alice = config['alice']['channelmap']['startGun']
+    ch_start_gun_bob = config['bob']['channelmap']['startGun']
     # Trim data
     print("Starting trim data procedure")
     trimmedData, err = cl.trim_data(
@@ -140,7 +158,10 @@ def trim_and_check_for_jumps(rawData, config):
     err = cl.check_for_timetagger_jump(trimmedData, config)
 
     if (err is None):
-        return errors, trimmedData
+        print('checking starting gun')
+        gun_limits = check_starting_gun(trimmedData, ch_start_gun_alice,
+                                        ch_start_gun_bob)
+        return errors, trimmedData, gun_limits
 
     errors = {}
     errors['ttagJump'] = {}
@@ -155,7 +176,10 @@ def trim_and_check_for_jumps(rawData, config):
     if err['err']:
         data_list_split_at_jumps = cl.split_data_at_jumps(trimmedData, err)
     else:
-        return errors, trimmedData
+        print('checking starting gun')
+        gun_limits = check_starting_gun(trimmedData, ch_start_gun_alice,
+                                        ch_start_gun_bob)
+        return errors, trimmedData, gun_limits
 
     if (trimmedData is not None) & (data_list_split_at_jumps is not None):
         trimmed_data_list = []
@@ -175,31 +199,51 @@ def trim_and_check_for_jumps(rawData, config):
                     trimmedData[party] = np.hstack(
                         (trimmedData[party], td[party]))
 
-    return errors, trimmedData
+    print('checking starting gun')
+    gun_limits = check_starting_gun(trimmedData, ch_start_gun_alice,
+                                    ch_start_gun_bob)
+    return errors, trimmedData, gun_limits
 
 
 def analyze_data(rawData, config):
     paramsCh = get_ch_settings(config)
-    paramsCh = get_ch_settings(config)
+    # paramsCh = get_ch_settings(config)
     divider = paramsCh['divider'] * 1.
     findPk = paramsCh['findPk']
     usePockelsMask = config['pockelProp']['enable']
     abDelay = config['analysis']['pulseABDelay']
 
-    errors, trimmedData = trim_and_check_for_jumps(rawData, config)
+    errors, trimmedData, gun_limits = trim_and_check_for_jumps(rawData, config)
 
     paramsSingle = copy.deepcopy(paramsCh)
     params = {'alice': {}, 'bob': {}}
     for detA in paramsCh['alice']['channels']['detector'].keys():
         for detB in paramsCh['bob']['channels']['detector'].keys():
-            detKey = detA + detB
+
             detChA = paramsCh['alice']['channels']['detector'][detA]
             detChB = paramsCh['bob']['channels']['detector'][detB]
+
             paramsSingle['alice']['channels']['detector'] = detChA
             paramsSingle['bob']['channels']['detector'] = detChB
 
-            props = cl.calc_data_properties(
-                trimmedData, paramsSingle, divider, findPk=findPk)
+            # settA1 = paramsCh['alice']['channels']['setting0']
+            # settA2 = paramsCh['alice']['channels']['setting1']
+            # settB1 = paramsCh['bob']['channels']['setting0']
+            # settB2 = paramsCh['bob']['channels']['setting1']
+
+            # paramsSingle['alice']['channels']['setting0'] = settA1
+            # paramsSingle['alice']['channels']['setting1'] = settA2
+            # paramsSingle['bob']['channels']['setting0'] = settB1
+            # paramsSingle['bob']['channels']['setting1'] = settB2
+
+            # startGunA = paramsCh['alice']['channels']['startGun']
+            # startGunB = paramsCh['bob']['channels']['startGun']
+
+            # paramsSingle['alice']['channels']['startGun'] = startGunA
+            # paramsSingle['bob']['channels']['startGun'] = startGunB
+
+    props = cl.calc_data_properties(
+        trimmedData, paramsSingle, divider, findPk=findPk)
 
     reducedData = {}
 
@@ -209,12 +253,17 @@ def analyze_data(rawData, config):
     offset['bob'] = 0
     pcStart = int(config['pockelProp']['start'])
     pcLength = int(config['pockelProp']['length']) + 1
-
+    latency_info = {}
+    latency_info['starting_gun'] = gun_limits
     for party in rawData.keys():
-        reduced = cl.get_processed_data(trimmedData[party], props[party],
-                                        offset[party], pcStart, pcLength)
+        reduced, latency_info_1_party =\
+            cl.get_processed_data(trimmedData[party], props[party],
+                                  offset[party], pcStart, pcLength)
         reducedData[party] = reduced
-    return reducedData, errors
+        latency_info[party] = latency_info_1_party
+        latency_info[party]['sync_info'] = props[party]['info_array']
+
+    return reducedData, errors, latency_info
 
 
 def process_counts(data):

@@ -9,6 +9,9 @@ from copy import deepcopy
 
 TTAGERRESOLUTION = 78.125E-12
 
+with open('constants.json', 'r') as f:
+    CONSTS = json.load(f)
+
 # @jit(nopython=True, cache=True)
 
 
@@ -283,7 +286,8 @@ def calc_settings(data, settingChannels, syncArray):
 # @jit
 
 
-def calc_period(det, divider=800, syncCh=6, maxPeriod=170):
+def calc_period(det, divider=800, syncCh=6, loggingMaxPeriod=170,
+                loggingMinPeriod=150):
     '''
     Need to determine the period of the laser. Cand do this by looking
     at how often the sync pulses come in and use the divider information
@@ -295,15 +299,35 @@ def calc_period(det, divider=800, syncCh=6, maxPeriod=170):
     larger than this are treated as an error, and their values are replaced
     with the previous valid value.
     '''
+    maxPeriod = CONSTS['maxPeriod']
+    minPeriod = CONSTS['minPeriod']
     syncBool = det['ch'] == syncCh
     syncs = det['ttag'][syncBool]
     laserPeriodArray = np.diff(syncs) / divider
 
     laserPeriodArray = np.append(laserPeriodArray, laserPeriodArray[-1])
-    laserPeriod = np.mean(laserPeriodArray[laserPeriodArray < maxPeriod])
+    laserPeriod = np.mean(
+        laserPeriodArray[(laserPeriodArray < maxPeriod) &
+                         (laserPeriodArray > minPeriod)])
+    laserPeriodLoggingArray = laserPeriodArray[(laserPeriodArray <
+                                                loggingMaxPeriod) &
+                                               (laserPeriodArray >
+                                                loggingMinPeriod)]
+
+    laserPeriodLogging = np.mean(laserPeriodLoggingArray)
+    laserPeriodLoggingMax = np.max(laserPeriodLoggingArray)
+    laserPeriodLoggingMin = np.min(laserPeriodLoggingArray)
+    laserPeriodAll = np.mean(laserPeriodArray)
+    laserPeriodAllMax = np.max(laserPeriodArray)
+    laserPeriodAllMin = np.min(laserPeriodArray)
     # errorLP = np.where(laserPeriodArray > maxPeriod)
-    # laserPeriodArray[errorLP] = laserPeriodArray[np.roll(errorLP, -1)]
-    return(laserPeriod, laserPeriodArray)
+    # laserPeriodArray[errorLP] = laserPeriodArray[np.roll(errorLP,
+    # -1)]
+    info_array = [laserPeriod, laserPeriodLogging,
+                  laserPeriodLoggingMax,
+                  laserPeriodLoggingMin, laserPeriodAll,
+                  laserPeriodAllMax, laserPeriodAllMin]
+    return (laserPeriod, laserPeriodArray, info_array)
 
 # @jit
 
@@ -464,7 +488,8 @@ def check_for_timetagger_jump(rawData, params):
 
 def calc_phase_info(det, divider, ch):
 
-    laserPeriod, laserPeriodArray = calc_period(det, divider, ch['sync'])
+    laserPeriod, laserPeriodArray, info_array = calc_period(
+        det, divider, ch['sync'])
 
     syncArray, syncBool = get_sync_array(det, ch['sync'])
     syncTTAGs = det['ttag'][syncBool]
@@ -479,7 +504,7 @@ def calc_phase_info(det, divider, ch):
 
     laserPulse = np.floor(ttagModSync * 1. / laserPeriodArray[syncArray])
     # print('Phase', laserPeriod, laserPeriodArray)
-    return(phase, laserPulse, ttagModSync, laserPeriod)
+    return (phase, laserPulse, ttagModSync, laserPeriod, info_array)
 
 
 def calc_phase_histogram(laserPeriod, phase, clickBool):
@@ -496,8 +521,8 @@ def calc_coinc_window_mask(det, params, divider, pkIdx='auto', ):
     radius = params['radius']
     clickBool = det['ch'] == ch['detector']
 
-    phase, laserPulse, ttagModSync, laserPeriod = calc_phase_info(
-        det, divider, ch)
+    phase, laserPulse, ttagModSync, laserPeriod, info_array =\
+        calc_phase_info(det, divider, ch)
     phaseHist, pk = calc_phase_histogram(laserPeriod, phase, clickBool)
     # print(phaseHist)
 
@@ -514,7 +539,7 @@ def calc_coinc_window_mask(det, params, divider, pkIdx='auto', ):
     phaseHist['pkIdx'] = pkIdx
     phaseHist['phaseHist'] = phaseHist
     phaseHist['laserPeriod'] = laserPeriod
-    return inWindowMask, laserPulse, phaseHist
+    return inWindowMask, laserPulse, phaseHist, info_array
 
 # def calc_pockels_mask(data, laserPulse, pcStart, pcStop, abDelay):
 #     # Now check for events that are inside the pockels cell Window
@@ -569,7 +594,7 @@ def calc_data_properties_one_party(data, params, divider,
         pkIdx = True
     else:
         pkIdx = params['pkIdx']
-    inWindowMask, laserPulse, phaseHist = calc_coinc_window_mask(
+    inWindowMask, laserPulse, phaseHist, info_array = calc_coinc_window_mask(
         det, params, divider, pkIdx=pkIdx)
     phaseHist['name'] = party
 
@@ -597,11 +622,56 @@ def calc_data_properties_one_party(data, params, divider,
     props['laserPulseHist'] = laserPulseHist
     props['laserPulse'] = laserPulse
     props['params'] = params
+    props['info_array'] = info_array
     # print(party, phaseHist['laserPeriod'])
     # props['inPCWindowMask'] = inPCWindowMask
     # props['outPCWindowMask'] = outPCWindowMask
 
-    return(props)
+    return (props)
+
+
+def compute_statistics(latencies):
+    minimum = np.min(latencies)
+    maximum = np.max(latencies)
+    std = np.std(latencies)
+    mean = np.mean(latencies)
+    return [minimum, maximum, std, mean]
+
+
+def compute_latencies(data, props,
+                      phaseMask, pockelsMask):
+    # Create an array the same length as the det record of timetags,
+    # but containing the sync timetag for that period. Useful for
+    # computing timetags of events relative to the start of a sync
+    # pulse.
+    syncBool = props['syncBool']
+    syncArray = props['syncArray']
+
+    params = props['params']
+
+    ch_rng_1 = params['channels']['setting0']
+    ch_rng_2 = params['channels']['setting1']
+
+    # ch_start_gun = params['channels']['startGun']
+
+    syncTTAGs = data['ttag'][syncBool]
+    syncAtEveryEvent = syncTTAGs[syncArray]
+    ttagModSync = data['ttag'] - syncAtEveryEvent
+    valid_mask = phaseMask & pockelsMask
+    valid_events = ttagModSync[valid_mask]
+    print('first detection event:', np.min(valid_events))
+    last_detection_latency = np.max(valid_events)
+
+    rng_1_mask = data['ch'] == ch_rng_1
+    rng_2_mask = data['ch'] == ch_rng_2
+
+    rng_1_stats = compute_statistics(ttagModSync[rng_1_mask])
+    rng_2_stats = compute_statistics(ttagModSync[rng_2_mask])
+
+    # rng_inputs =
+    return {'last_det': last_detection_latency,
+            'rng_1_latency': rng_1_stats,
+            'rng_2_latency': rng_2_stats}
 
 
 def get_processed_data(data, props, offset, pcStart, pcLength):
@@ -611,7 +681,12 @@ def get_processed_data(data, props, offset, pcStart, pcLength):
 
     phaseMask = get_window_mask(data, props)
     pockelsMask, paramsPockels = get_pockels_mask(data, props,
-                                                  offset, pcStart, pcLength)
+                                                  offset, pcStart,
+                                                  pcLength)
+
+    latency_info = compute_latencies(data, props, phaseMask,
+                                     pockelsMask)
+
     laserPulse = deepcopy(props['laserPulse'])
     # print('laser pulse', laserPulse)
     laserPulse = laserPulse - offset - pcStart  # index first lp to 0
@@ -650,7 +725,7 @@ def get_processed_data(data, props, offset, pcStart, pcLength):
     # print(detectionVals, max(detectionVals))
     # print('\n')
 
-    return results
+    return results, latency_info
 
 
 def trim_processed_data(data, ttagOffset, syncTTagDiff):
@@ -752,7 +827,7 @@ def write_single_party_to_compressed_file(fname, data, save='bin'):
         f.close()
     else:
         np.savez_compressed(fname, data=data)
-    return(fname)
+    return (fname)
 
 ########
 
@@ -807,7 +882,7 @@ def find_fwhm(X, Y):
     d = Y - (max(Y) * frac)
     indexes = np.where(d > 0)[0]
     fwhm = np.abs(X[indexes[-1]] - X[indexes[0]]) + 1
-    return(fwhm)
+    return (fwhm)
 
 # @jit
 
@@ -824,7 +899,7 @@ def remove_duplicate_ttags(rawData):
     rawData['ch'] = rawData['ch'][diffTtags0Bool]
     rawData['ttag'] = rawData['ttag'][diffTtags0Bool]
 
-    return(rawData)
+    return (rawData)
 
 # @jit
 
@@ -846,7 +921,7 @@ def get_reduced_data(rawData, params):
 
         det = det[first:last]
         reducedData[key] = det
-    return(reducedData)
+    return (reducedData)
 
 
 def laser_pulse_histogram(laserPulse, inWindowMask, clickBool, divider):
@@ -901,7 +976,7 @@ def find_offset_coinc(props, abdelay, corr):
     dB = dB[dBBool]
 
     coinc = np.intersect1d(dA, dB).astype(int)
-    return(coinc)
+    return (coinc)
 
 
 def calc_offset(data, params, divider):
@@ -1010,9 +1085,9 @@ def calc_offset(data, params, divider):
 
     return ret
 
-# def calc_offset_timetags_only(data, params, divider): 
+# def calc_offset_timetags_only(data, params, divider):
 #     DIVIDER = divider
-#     props = calc_data_properties(data, params, divider=divider, findPk=True) 
+#     props = calc_data_properties(data, params, divider=divider, findPk=True)
 #     alice_first_detection = data['alice']['ttag'][0]
 #     bob_first_detection = data['bob']['ttag'][0]
 
@@ -1048,9 +1123,9 @@ def calc_offset(data, params, divider):
 #     alice_time_tags = alice_time_tags[0:total_length]
 #     bob_time_tags = bob_time_tags[0:total_length]
 
-#     # Now we should have a somewhat correct set. 
+#     # Now we should have a somewhat correct set.
 #     number_detections = 200
-    
+
 #     alice_first_n_detections = (alice_time_tags[0:number_detections] - alice_time_tags[0]).astype(int)
 #     bob_first_n_detections = (bob_time_tags[0:number_detections] - bob_time_tags[0]).astype(int)
 
@@ -1069,7 +1144,7 @@ def calc_offset(data, params, divider):
 #     # if alice_time_tags[0]>bob_time_tags[0]:
 #     #     difference_in_timetags = alice_time_tags - bob_time_tags
 #     #     sign_of_difference_in_timetags = 1
-#     # else: 
+#     # else:
 #     #     difference_in_timetags = bob_time_tags - alice_time_tags
 #     #     sign_of_difference_in_timetags = -1
 #     # avg_difference_in_timetags = np.average(difference_in_timetags)
@@ -1142,8 +1217,8 @@ def calc_violation(stats):
     pValue = calc_pvalue(Ntot, ratio)
 
     print("Ratio:", ratio, "pValue:", pValue)
-    return(CH, CHn, ratio, pValue)
+    return (CH, CHn, ratio, pValue)
 
 
 def calc_pvalue(N, prob):
-    return(binom.cdf(N * (1 - prob), N, 0.5))
+    return (binom.cdf(N * (1 - prob), N, 0.5))
