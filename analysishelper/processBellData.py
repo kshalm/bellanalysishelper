@@ -53,7 +53,7 @@ def process_single_run(files, aggregate=True, findSync=False):
 
     counts = process_counts(reducedData)
     counts = counts.astype('int')
-    print(info)
+    # print(info)
     return counts, compressedData, errors, info
 
 
@@ -123,33 +123,15 @@ def check_for_detector_going_normal(ttags):
     pass
 
 
-def check_starting_gun(trimmedData, ch_alice, ch_bob):
-    alice_start_gun_mask = trimmedData['alice']['ch'] == ch_alice
-    bob_start_gun_mask = trimmedData['bob']['ch'] == ch_bob
-    alice_ttags_gun = trimmedData['alice']['ttag'][alice_start_gun_mask]
-    bob_ttags_gun = trimmedData['bob']['ttag'][bob_start_gun_mask]
-    if len(alice_ttags_gun) != len(bob_ttags_gun):
-        length = np.min(len(alice_ttags_gun), len(bob_ttags_gun))
-        alice_ttags_gun = alice_ttags_gun[:length]
-        bob_ttags_gun = bob_ttags_gun[:length]
-
-    diffs = bob_ttags_gun - alice_ttags_gun
-    minimum = np.min(diffs)
-    maximum = np.max(diffs)
-    return [minimum, maximum]
-
-
 def trim_and_check_for_jumps(rawData, config):
     errors = None
     ttagOffset = config['analysis']['ttagOffset']
     abDelay = config['analysis']['pulseABDelay']
     syncTTagDiff = config['analysis']['syncTTagDiff']
     paramsCh = get_ch_settings(config)
-    ch_start_gun_alice = config['alice']['channelmap']['startGun']
-    ch_start_gun_bob = config['bob']['channelmap']['startGun']
     # Trim data
     print("Starting trim data procedure")
-    trimmedData, err = cl.trim_data(
+    trimmedData, err, heartbeat_bounds = cl.trim_data_to_heartbeat(
         rawData, ttagOffset, abDelay, syncTTagDiff, paramsCh)
 
     # # check for jumps
@@ -158,10 +140,7 @@ def trim_and_check_for_jumps(rawData, config):
     err = cl.check_for_timetagger_jump(trimmedData, config)
 
     if (err is None):
-        print('checking starting gun')
-        gun_limits = check_starting_gun(trimmedData, ch_start_gun_alice,
-                                        ch_start_gun_bob)
-        return errors, trimmedData, gun_limits
+        return errors, trimmedData, heartbeat_bounds
 
     errors = {}
     errors['ttagJump'] = {}
@@ -176,10 +155,7 @@ def trim_and_check_for_jumps(rawData, config):
     if err['err']:
         data_list_split_at_jumps = cl.split_data_at_jumps(trimmedData, err)
     else:
-        print('checking starting gun')
-        gun_limits = check_starting_gun(trimmedData, ch_start_gun_alice,
-                                        ch_start_gun_bob)
-        return errors, trimmedData, gun_limits
+        return errors, trimmedData, heartbeat_bounds
 
     if (trimmedData is not None) & (data_list_split_at_jumps is not None):
         trimmed_data_list = []
@@ -199,10 +175,7 @@ def trim_and_check_for_jumps(rawData, config):
                     trimmedData[party] = np.hstack(
                         (trimmedData[party], td[party]))
 
-    print('checking starting gun')
-    gun_limits = check_starting_gun(trimmedData, ch_start_gun_alice,
-                                    ch_start_gun_bob)
-    return errors, trimmedData, gun_limits
+    return errors, trimmedData, heartbeat_bounds
 
 
 def analyze_data(rawData, config):
@@ -210,13 +183,14 @@ def analyze_data(rawData, config):
     # paramsCh = get_ch_settings(config)
     divider = paramsCh['divider'] * 1.
     findPk = paramsCh['findPk']
-    usePockelsMask = config['pockelProp']['enable']
+    # usePockelsMask = config['pockelProp']['enable']
     abDelay = config['analysis']['pulseABDelay']
 
-    errors, trimmedData, gun_limits = trim_and_check_for_jumps(rawData, config)
+    errors, trimmedData, heartbeat_bounds = trim_and_check_for_jumps(
+        rawData, config)
 
     paramsSingle = copy.deepcopy(paramsCh)
-    params = {'alice': {}, 'bob': {}}
+    # params = {'alice': {}, 'bob': {}}
     for detA in paramsCh['alice']['channels']['detector'].keys():
         for detB in paramsCh['bob']['channels']['detector'].keys():
 
@@ -236,12 +210,6 @@ def analyze_data(rawData, config):
             # paramsSingle['bob']['channels']['setting0'] = settB1
             # paramsSingle['bob']['channels']['setting1'] = settB2
 
-            # startGunA = paramsCh['alice']['channels']['startGun']
-            # startGunB = paramsCh['bob']['channels']['startGun']
-
-            # paramsSingle['alice']['channels']['startGun'] = startGunA
-            # paramsSingle['bob']['channels']['startGun'] = startGunB
-
     props = cl.calc_data_properties(
         trimmedData, paramsSingle, divider, findPk=findPk)
 
@@ -254,7 +222,7 @@ def analyze_data(rawData, config):
     pcStart = int(config['pockelProp']['start'])
     pcLength = int(config['pockelProp']['length']) + 1
     latency_info = {}
-    latency_info['starting_gun'] = gun_limits
+    latency_info['heartbeat_bounds'] = heartbeat_bounds
     for party in rawData.keys():
         reduced, latency_info_1_party =\
             cl.get_processed_data(trimmedData[party], props[party],
@@ -300,7 +268,7 @@ def get_ch_settings(config):
         params[key]['radius'] = config[key]['coin_radius'] - 1
         params[key]['channels'] = config[key]['channelmap']
         params[key]['pkIdx'] = config[key]['channelmap']['pkIdx'] * 1.
-
+        params[key]['heartbeat'] = config[key]['channelmap']['heartbeat']
     params['divider'] = config['DIVIDER'] * 1.
     params['measureViol'] = config['measureViol']
     params['findPk'] = config['analysis']['findPk']

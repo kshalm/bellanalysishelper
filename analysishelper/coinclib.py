@@ -9,7 +9,7 @@ from copy import deepcopy
 
 TTAGERRESOLUTION = 78.125E-12
 
-with open('constants.json', 'r') as f:
+with open('config/sync_constants.json', 'r') as f:
     CONSTS = json.load(f)
 
 # @jit(nopython=True, cache=True)
@@ -104,7 +104,6 @@ def find_coincidences(ch1Data, ch2Data, radius):
 
 
 def find_first_last_timetags(data, ttagOffset, syncTTagDiff, params, dt=None):
-    dtype = data['alice']['ttag'].dtype
     aData = data['alice']['ttag']
     bData = data['bob']['ttag']
 
@@ -127,7 +126,7 @@ def find_first_last_timetags(data, ttagOffset, syncTTagDiff, params, dt=None):
         aliceSyncTTags = aData[aliceSyncs]
         aliceSyncMask = aliceSyncTTags >= startTTag
         firstSyncTTag = aliceSyncTTags[aliceSyncMask][0]
-
+    print('firstSyncTTag is ', firstSyncTTag, syncTTagDiff)
     stopTTag = min(aData[-1], bData[-1])
 
     if dt is not None:
@@ -136,11 +135,9 @@ def find_first_last_timetags(data, ttagOffset, syncTTagDiff, params, dt=None):
         endTime = stopTTag  # large number
 
     if stopTTag < endTime:
-        err = True
         endTime = stopTTag
 
     if startTTag > endTime:
-        err = True
         startTTag = 0
         endTime = max(aData[-1], bData[-1])
 
@@ -157,32 +154,98 @@ def find_first_last_timetags(data, ttagOffset, syncTTagDiff, params, dt=None):
     return trimmedData
 
 
-def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
+def check_heartbeat(trimmedData, ch_alice, ch_bob):
+    alice_heartbeat_mask = trimmedData['alice']['ch'] == ch_alice
+    bob_heartbeat_mask = trimmedData['bob']['ch'] == ch_bob
+    alice_ttags_heartbeat = trimmedData['alice']['ttag'][alice_heartbeat_mask]
+    bob_ttags_heartbeat = trimmedData['bob']['ttag'][bob_heartbeat_mask]
+    if len(alice_ttags_heartbeat) != len(bob_ttags_heartbeat):
+        length = np.min([len(alice_ttags_heartbeat), len(bob_ttags_heartbeat)])
+        alice_ttags_heartbeat = alice_ttags_heartbeat[:length]
+        bob_ttags_heartbeat = bob_ttags_heartbeat[:length]
+
+    diffs = bob_ttags_heartbeat - alice_ttags_heartbeat
+    minimum = np.min(diffs)
+    maximum = np.max(diffs)
+    return [minimum, maximum]
+
+
+def trim_data_to_heartbeat(data, ttagOffset, abDelay, syncTTagDiff,
+                           params, dt=None):
+
+    data, err, ret_now = initial_checking(data, dt)
+    if ret_now:
+        return data, err
+    # do the timetagger correction now
+    if ttagOffset <= 0:
+        data['alice']['ttag'] = data['alice']['ttag'] + np.abs(ttagOffset)
+    else:
+        data['bob']['ttag'] = data['bob']['ttag'] + ttagOffset
+
+    # trimmedData, err, _ = initial_trimming(data, ttagOffset,
+    #                                       syncTTagDiff, params, dt)
+    ch_alice_heartbeat = params['alice']['heartbeat']
+    ch_bob_heartbeat = params['bob']['heartbeat']
+    heartbeat_bounds = check_heartbeat(data,
+                                       ch_alice_heartbeat,
+                                       ch_bob_heartbeat)
+    alice_first_heartbeat_idx = np.where(
+        data['alice']['ch'] == ch_alice_heartbeat)[0][0]
+    bob_first_heartbeat_idx = np.where(
+        data['bob']['ch'] == ch_bob_heartbeat)[0][0]
+
+    first_heartbeat_idx = np.max([alice_first_heartbeat_idx,
+                                  bob_first_heartbeat_idx])
+
+    data['alice'] = data['alice'][first_heartbeat_idx:]
+    data['bob'] = data['bob'][first_heartbeat_idx:]
+    # continue trimming with ttag offset set to zero
+    trimmedData, err = trim_data(data, 0, abDelay, syncTTagDiff,
+                                 params, dt=dt)
+    return trimmedData, err, heartbeat_bounds
+
+
+def initial_checking(data, dt):
     err = False
     trimmedData = {'alice': {}, 'bob': {}}
-
+    ret_now = False
     validData = True
     for key in data:
         if data[key] is None:
             validData = False
 
-    if validData == False:
+    if not validData:
         for key in data:
             tdata = trim_data_single_party(data[key], dt=dt)
             trimmedData[key] = tdata
         err = True
-        return trimmedData, err
+        ret_now = True
+        return trimmedData, err, ret_now
+    return data, err, ret_now
 
-    dtype = data['alice']['ttag'].dtype
+
+def initial_trimming(data, ttagOffset, syncTTagDiff, params, dt):
+    data, err, ret_now = initial_checking(data, dt)
+    if ret_now:
+        return data, err, ret_now
+
+    # dtype = data['alice']['ttag'].dtype
 
     trimmedData = find_first_last_timetags(
         data, ttagOffset, syncTTagDiff, params, dt=dt)
+    return trimmedData, err, ret_now
 
+
+def trim_data(data, ttagOffset, abDelay, syncTTagDiff, params, dt=None):
+    trimmedData, err, ret_now = initial_trimming(data, ttagOffset,
+                                                 syncTTagDiff, params, dt)
+    if ret_now:
+        return trimmedData, err
     # Make sure each dataset has the same number of sync pulses / trials
     nSyncs = {}
     syncBool = {}
     for party in ['alice', 'bob']:
-        ch = params[party]['channels']
+        # ch = params[party]['channels']
         # syncArray, sBool = get_sync_array(trimmedData[party], ch['sync'])
         sBool, nSyncsParty = calc_n_syncs(trimmedData, party, params)
         # nSyncs[party] = sBool.sum()
@@ -251,9 +314,9 @@ def trim_data_single(data, params):
 
 def get_sync_array(data, syncCh):
     '''
-    Returns an array that is equal to the length of the number of timetags 
+    Returns an array that is equal to the length of the number of timetags
     recorded. Each element contains the sync number corresponding to that
-    timetag. Useful for figuring out which synch pulse a given timetag 
+    timetag. Useful for figuring out which synch pulse a given timetag
     occurs in.
 
     data: the raw channel and ttag data aray.
@@ -291,8 +354,8 @@ def calc_period(det, divider=800, syncCh=6, loggingMaxPeriod=170,
     '''
     Need to determine the period of the laser. Cand do this by looking
     at how often the sync pulses come in and use the divider information
-    to back out the laser period in terms of timetagging bins. Returns the 
-    mean period as well as an array of the average period of the laser 
+    to back out the laser period in terms of timetagging bins. Returns the
+    mean period as well as an array of the average period of the laser
     between synch pulses.
 
     maxPeriod is an upper bound on the laser period. Any values computed
@@ -350,7 +413,6 @@ def check_for_timetagger_roll_over(rawData, params):
 
 
 def split_data_at_jumps(rawData, err):
-    n_ttags_to_skip = 1
     ttag_jump_list = []
     raw_data_list = []
     data_to_split = rawData
@@ -398,7 +460,7 @@ def split_data(rawData, jump_ttag, n_ttags_to_skip=100):
             new_start = jump_pos[n_ttags_to_skip]
             mask_after = ttags > ttags[new_start]
             raw_data_after[party] = rawData[party][mask_after]
-        except:
+        except Exception:
             # Too close to the end.
             raw_data_after[party] = None
 
@@ -430,14 +492,15 @@ def check_for_timetagger_jump(rawData, params):
     if jump['skip']:
         error = {'jointSkip': False, 'err': False, 'info': {}}
         error['info'] = jump['jumpInfo']
-        raw_data_list = None
+        # raw_data_list = None
         # print('looking for errors')
-        all_jump_pos = []
+        # all_jump_pos = []
         ji = jump['jumpInfo']
         # Compute the overlap between jump events
         if len(jump['party']) > 1:  # errors on both parties
             overlap, a_ind, b_ind = np.intersect1d(
-                ji['alice']['position'], ji['bob']['position'], return_indices=True)
+                ji['alice']['position'], ji['bob']['position'],
+                return_indices=True)
 
             if len(overlap) > 0:
                 error['jointSkip'] = True
@@ -500,7 +563,7 @@ def calc_phase_info(det, divider, ch):
     ttagModSync = det['ttag'] - syncAtEveryEvent
 
     phase = ttagModSync % laserPeriodArray[syncArray]
-    clickBool = det['ch'] == ch['detector']
+    # clickBool = det['ch'] == ch['detector']
 
     laserPulse = np.floor(ttagModSync * 1. / laserPeriodArray[syncArray])
     # print('Phase', laserPeriod, laserPeriodArray)
@@ -521,8 +584,8 @@ def calc_coinc_window_mask(det, params, divider, pkIdx='auto', ):
     radius = params['radius']
     clickBool = det['ch'] == ch['detector']
 
-    phase, laserPulse, ttagModSync, laserPeriod, info_array =\
-        calc_phase_info(det, divider, ch)
+    phase, laserPulse, ttagModSync, laserPeriod, info_array = calc_phase_info(
+        det, divider, ch)
     phaseHist, pk = calc_phase_histogram(laserPeriod, phase, clickBool)
     # print(phaseHist)
 
@@ -652,8 +715,6 @@ def compute_latencies(data, props,
     ch_rng_1 = params['channels']['setting0']
     ch_rng_2 = params['channels']['setting1']
 
-    # ch_start_gun = params['channels']['startGun']
-
     syncTTAGs = data['ttag'][syncBool]
     syncAtEveryEvent = syncTTAGs[syncArray]
     ttagModSync = data['ttag'] - syncAtEveryEvent
@@ -676,7 +737,7 @@ def compute_latencies(data, props,
 
 def get_processed_data(data, props, offset, pcStart, pcLength):
     settings = props['settingsSync'].astype(int)
-    syncArray = props['syncArray']
+    # syncArray = props['syncArray']
     syncBool = props['syncBool']
 
     phaseMask = get_window_mask(data, props)
@@ -1016,8 +1077,8 @@ def calc_offset(data, params, divider):
 
     '''
     Since there are multiple possible laser pulse offsets that show up
-    in the convultion peak, iterate over all possible candidates and 
-    calculate the number of coincidences each one predicts. 
+    in the convultion peak, iterate over all possible candidates and
+    calculate the number of coincidences each one predicts.
     '''
     for i in range(len(offsetVals)):
         offset = offsetVals[i]
