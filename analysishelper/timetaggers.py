@@ -8,18 +8,17 @@ import copy
 # import analysis_library as al
 # import singletimetagger as tt
 
-
 try:
     import analysishelper.coinclib as cl
-except Exception:
+except ModuleNotFoundError:
     import coinclib as cl
 try:
     import analysishelper.singletimetagger as tt
-except Exception:
+except ModuleNotFoundError:
     import singletimetagger as tt
 try:
     import analysishelper.analysis_library as al
-except Exception:
+except ModuleNotFoundError:
     import analysis_library as al
 
 

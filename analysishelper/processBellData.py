@@ -7,11 +7,11 @@ import base64
 # import coinclib as cl
 try:
     import analysishelper.coinclib as cl
-except Exception:
+except ModuleNotFoundError:
     import coinclib as cl
 try:
     import analysishelper.timetaggers as tt
-except Exception:
+except ModuleNotFoundError:
     import timetaggers as tt
 
 
