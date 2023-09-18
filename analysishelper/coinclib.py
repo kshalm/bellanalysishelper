@@ -8,9 +8,13 @@ from scipy.stats import binom
 from copy import deepcopy
 
 TTAGERRESOLUTION = 78.125E-12
-
-with open('config/sync_constants.json', 'r') as f:
-    CONSTS = json.load(f)
+try:
+    with open('config/sync_constants.json', 'r') as f:
+        CONSTS = json.load(f)
+except FileNotFoundError:
+    CONST = {}
+    CONSTS['maxPeriod'] = 170
+    CONSTS['minPeriod'] = 150
 
 # @jit(nopython=True, cache=True)
 
