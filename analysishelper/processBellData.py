@@ -223,6 +223,7 @@ def analyze_data(rawData, config):
     pcLength = int(config['pockelProp']['length']) + 1
     latency_info = {}
     latency_info['heartbeat_bounds'] = heartbeat_bounds
+    #    latency_info['sync_bounds'] = heartbeat_bounds[1]
     for party in rawData.keys():
         reduced, latency_info_1_party =\
             cl.get_processed_data(trimmedData[party], props[party],

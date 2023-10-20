@@ -158,20 +158,38 @@ def find_first_last_timetags(data, ttagOffset, syncTTagDiff, params, dt=None):
     return trimmedData
 
 
-def check_heartbeat(trimmedData, ch_alice, ch_bob):
-    alice_heartbeat_mask = trimmedData['alice']['ch'] == ch_alice
-    bob_heartbeat_mask = trimmedData['bob']['ch'] == ch_bob
+def check_heartbeat(trimmedData, ch_hb_alice, ch_hb_bob,
+                    ch_sync_alice, ch_sync_bob):
+    alice_heartbeat_mask = trimmedData['alice']['ch'] == ch_hb_alice
+    bob_heartbeat_mask = trimmedData['bob']['ch'] == ch_hb_bob
     alice_ttags_heartbeat = trimmedData['alice']['ttag'][alice_heartbeat_mask]
     bob_ttags_heartbeat = trimmedData['bob']['ttag'][bob_heartbeat_mask]
+
+    alice_sync_mask = trimmedData['alice']['ch'] == ch_sync_alice
+    bob_sync_mask = trimmedData['bob']['ch'] == ch_sync_bob
+    alice_ttags_sync = trimmedData['alice']['ttag'][alice_sync_mask]
+    bob_ttags_sync = trimmedData['bob']['ttag'][bob_sync_mask]
+
     if len(alice_ttags_heartbeat) != len(bob_ttags_heartbeat):
         length = np.min([len(alice_ttags_heartbeat), len(bob_ttags_heartbeat)])
         alice_ttags_heartbeat = alice_ttags_heartbeat[:length]
         bob_ttags_heartbeat = bob_ttags_heartbeat[:length]
 
+    if len(alice_ttags_sync) != len(bob_ttags_sync):
+        length_sync = np.min([len(alice_ttags_sync), len(bob_ttags_sync)])
+        alice_ttags_sync = alice_ttags_sync[:length_sync]
+        bob_ttags_sync = bob_ttags_sync[:length_sync]
+
     diffs = bob_ttags_heartbeat - alice_ttags_heartbeat
+    diffs_sync = alice_ttags_sync - bob_ttags_sync
     minimum = np.min(diffs)
     maximum = np.max(diffs)
-    return [minimum, maximum]
+    mean_hb = np.mean(diffs)
+    min_sync = np.min(diffs_sync)
+    max_sync = np.max(diffs_sync)
+    mean_sync = np.mean(diffs_sync)
+    return [[minimum, mean_hb, maximum],
+            [min_sync, mean_sync,  max_sync]]
 
 
 def trim_data_to_heartbeat(data, ttagOffset, abDelay, syncTTagDiff,
@@ -190,9 +208,12 @@ def trim_data_to_heartbeat(data, ttagOffset, abDelay, syncTTagDiff,
     #                                       syncTTagDiff, params, dt)
     ch_alice_heartbeat = params['alice']['heartbeat']
     ch_bob_heartbeat = params['bob']['heartbeat']
+    ch_bob_sync = params['bob']['channels']['sync']
+    ch_alice_sync = params['alice']['channels']['sync']
     heartbeat_bounds = check_heartbeat(data,
                                        ch_alice_heartbeat,
-                                       ch_bob_heartbeat)
+                                       ch_bob_heartbeat,
+                                       ch_alice_sync, ch_bob_sync)
     alice_first_heartbeat_idx = np.where(
         data['alice']['ch'] == ch_alice_heartbeat)[0][0]
     bob_first_heartbeat_idx = np.where(
