@@ -176,10 +176,14 @@ def check_heartbeat(trimmedData, ch_hb_alice, ch_hb_bob,
         bob_ttags_heartbeat = bob_ttags_heartbeat[:length]
 
     if len(alice_ttags_sync) != len(bob_ttags_sync):
+        print('heartbeat check the syncs are different lengths!')
         length_sync = np.min([len(alice_ttags_sync), len(bob_ttags_sync)])
         alice_ttags_sync = alice_ttags_sync[:length_sync]
         bob_ttags_sync = bob_ttags_sync[:length_sync]
 
+    print('/n The syncs are: ',
+          alice_ttags_sync[:10],
+          bob_ttags_sync[:10])
     diffs = bob_ttags_heartbeat - alice_ttags_heartbeat
     diffs_sync = bob_ttags_sync - alice_ttags_sync
     minimum = np.min(diffs)
