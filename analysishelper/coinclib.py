@@ -165,15 +165,24 @@ def check_heartbeat(trimmedData, ch_hb_alice, ch_hb_bob,
     alice_ttags_heartbeat = trimmedData['alice']['ttag'][alice_heartbeat_mask]
     bob_ttags_heartbeat = trimmedData['bob']['ttag'][bob_heartbeat_mask]
 
-    alice_sync_mask = trimmedData['alice']['ch'] == ch_sync_alice
-    bob_sync_mask = trimmedData['bob']['ch'] == ch_sync_bob
-    alice_ttags_sync = trimmedData['alice']['ttag'][alice_sync_mask]
-    bob_ttags_sync = trimmedData['bob']['ttag'][bob_sync_mask]
-
     if len(alice_ttags_heartbeat) != len(bob_ttags_heartbeat):
         length = np.min([len(alice_ttags_heartbeat), len(bob_ttags_heartbeat)])
         alice_ttags_heartbeat = alice_ttags_heartbeat[:length]
         bob_ttags_heartbeat = bob_ttags_heartbeat[:length]
+
+    diffs = bob_ttags_heartbeat - alice_ttags_heartbeat
+
+    minimum = np.min(diffs)
+    maximum = np.max(diffs)
+    mean_hb = np.mean(diffs)
+    return [[minimum, mean_hb, maximum]]
+
+
+def check_syncs(trimmedData, ch_sync_alice, ch_sync_bob):
+    alice_sync_mask = trimmedData['alice']['ch'] == ch_sync_alice
+    bob_sync_mask = trimmedData['bob']['ch'] == ch_sync_bob
+    alice_ttags_sync = trimmedData['alice']['ttag'][alice_sync_mask]
+    bob_ttags_sync = trimmedData['bob']['ttag'][bob_sync_mask]
 
     if len(alice_ttags_sync) != len(bob_ttags_sync):
         print('heartbeat check the syncs are different lengths!')
@@ -181,19 +190,14 @@ def check_heartbeat(trimmedData, ch_hb_alice, ch_hb_bob,
         alice_ttags_sync = alice_ttags_sync[:length_sync]
         bob_ttags_sync = bob_ttags_sync[:length_sync]
 
-    print('/n The syncs are: ',
+    print('\n The first syncs are: ',
           alice_ttags_sync[:10],
           bob_ttags_sync[:10])
-    diffs = bob_ttags_heartbeat - alice_ttags_heartbeat
     diffs_sync = bob_ttags_sync - alice_ttags_sync
-    minimum = np.min(diffs)
-    maximum = np.max(diffs)
-    mean_hb = np.mean(diffs)
     min_sync = np.min(diffs_sync)
     max_sync = np.max(diffs_sync)
     mean_sync = np.mean(diffs_sync)
-    return [[minimum, mean_hb, maximum],
-            [min_sync, mean_sync,  max_sync]]
+    return [min_sync, mean_sync,  max_sync]
 
 
 def trim_data_to_heartbeat(data, ttagOffset, abDelay, syncTTagDiff,
@@ -231,6 +235,13 @@ def trim_data_to_heartbeat(data, ttagOffset, abDelay, syncTTagDiff,
     # continue trimming with ttag offset set to zero
     trimmedData, err = trim_data(data, 0, abDelay, syncTTagDiff,
                                  params, dt=dt)
+    if not err:
+        sync_bounds = check_syncs(trimmedData, ch_alice_sync,
+                                  ch_bob_sync)
+    else:
+        # this should force a failure
+        sync_bounds = [90000, 90000, 90000]
+    heartbeat_bounds.append(sync_bounds)
     return trimmedData, err, heartbeat_bounds
 
 
