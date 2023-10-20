@@ -181,7 +181,7 @@ def check_heartbeat(trimmedData, ch_hb_alice, ch_hb_bob,
         bob_ttags_sync = bob_ttags_sync[:length_sync]
 
     diffs = bob_ttags_heartbeat - alice_ttags_heartbeat
-    diffs_sync = alice_ttags_sync - bob_ttags_sync
+    diffs_sync = bob_ttags_sync - alice_ttags_sync
     minimum = np.min(diffs)
     maximum = np.max(diffs)
     mean_hb = np.mean(diffs)
