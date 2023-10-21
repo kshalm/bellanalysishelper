@@ -193,7 +193,7 @@ def check_syncs(trimmedData, ch_sync_alice, ch_sync_bob):
     print('\n The first syncs are: ',
           alice_ttags_sync[:10],
           bob_ttags_sync[:10])
-    diffs_sync = bob_ttags_sync - alice_ttags_sync
+    diffs_sync = alice_ttags_sync - bob_ttags_sync
     min_sync = np.min(diffs_sync)
     max_sync = np.max(diffs_sync)
     mean_sync = np.mean(diffs_sync)
