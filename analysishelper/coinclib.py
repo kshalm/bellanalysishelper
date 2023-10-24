@@ -197,7 +197,8 @@ def check_syncs(trimmedData, ch_sync_alice, ch_sync_bob):
     min_sync = np.min(diffs_sync)
     max_sync = np.max(diffs_sync)
     mean_sync = np.mean(diffs_sync)
-    return [min_sync, mean_sync,  max_sync]
+    std_sync = np.std(diffs_sync)
+    return [min_sync, mean_sync,  std_sync, max_sync]
 
 
 def trim_data_to_heartbeat(data, ttagOffset, abDelay, syncTTagDiff,
